@@ -11,7 +11,7 @@ from story_generator import (
 )
 
 # ------------------ Config & Branding ------------------
-APP_URL = os.getenv("APP_URL", "").strip()  # set in Streamlit Secrets for nicer share links
+APP_URL = os.getenv("APP_URL", "").strip()  
 st.set_page_config(page_title="ParsVerse – Myth & Persona", page_icon="🏛️", layout="centered")
 
 BRAND_CSS = """
@@ -175,7 +175,7 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
 
             # bump counters
             GLOBAL_COUNTS = bump_counter("myth")
-            st.experimental_rerun()  # refresh the header badge
+            st.rerun()  # refresh the header badge
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -292,6 +292,6 @@ Backstory:
 
         # bump counters
         GLOBAL_COUNTS = bump_counter("persona")
-        st.experimental_rerun()  # refresh header badge
+        st.rerun()  # refresh header badge
 
 st.caption("Tip: Traits + hobby/work guide the role, while region maps to a plausible Iranian realm. Endonyms are preferred; Indic/Greek exonyms are sanitized.")
