@@ -62,7 +62,7 @@ with st.form("detail_persona_form"):
         d_region = st.selectbox("Historical region", REGIONS, index=0, key="d_region")
         d_age = st.number_input("Age", min_value=12, max_value=90, value=24, step=1, key="d_age")
     with d_col2:
-        d_gender = st.selectbox("Gender", ["Female", "Male", "Non-binary", "Prefer not to say"], key="d_gender")
+        d_gender = st.selectbox("Gender", ["Female", "Male", "Prefer not to say"], key="d_gender")
         d_style = st.selectbox("Style / tone", ["Epic", "Mystic", "Royal", "Poet"], index=0, key="d_style")
         d_hobby = st.text_input("Hobby / Work (e.g., scholar, archer, merchant, healer)", key="d_hobby")
 
