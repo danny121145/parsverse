@@ -212,7 +212,9 @@ def _build_profile_prompt(
         "Use Old Persian/Avestan scholarly forms; avoid exonyms."
     )
     return f"""
-You are a cultural historian and storyteller of ancient Iran. Create a **structured persona profile** for:
+You are a cultural historian and storyteller of ancient Iran. Create a **personal, realistic persona profile** for the user with clear, concrete details.
+
+INPUTS
 - Name: {name}
 - Region: {region}
 - Age: {age}
@@ -220,76 +222,48 @@ You are a cultural historian and storyteller of ancient Iran. Create a **structu
 - Traits: {traits_str}
 - Hobby/Work: {hobby}
 
-Context for accuracy: {region_hint}
-Use a few region-appropriate motifs/terms when relevant: {lex}
-Likely realms to choose from (pick the best fit): {", ".join(realms)}.
+CONTEXT
+- Region hint: {region_hint}
+- Regional lexicon to sprinkle when relevant: {lex}
+- Likely realms to choose from (pick the best fit): {", ".join(realms)}.
 
-STRICT RULES:
-- Use ONLY Iranian/Persian terminology (Old Persian, Avestan, Middle Persian/Pahlavi, New Persian).
+TONE & STYLE
+- Speak **to** the user (2nd person) as if describing their life.
+- Prioritize **clarity and realism** over flowery language.
 - {translit_note}
 - DO NOT use non-Iranian/Indic terms. {FORBIDDEN_LINE}
-- Keep the tone {style.lower()}, culturally faithful to Iranian history/myth.
-- Be specific about **kingdom**, **city/locale**, and **role/job**; link the choice to traits/hobby.
-- Return ONLY valid JSON (no codeblock, no prose) with keys:
-  {{
-    "kingdom": "...",
-    "locale": "...",
-    "role": "...",
-    "titles": ["...", "..."],
-    "symbols": ["...", "..."],
-    "artifact": "...",
-    "backstory": "...",
-    "motto": "..."
-  }}
-- If you use Persian terms (e.g., farrah/farr, xšaça), briefly gloss in brackets the first time.
+- Use only Iranian/Persian terminology (Old Persian, Avestan, Middle Persian/Pahlavi, New Persian).
+- If you use a Persian term, gloss it once in brackets (e.g., farrah/farr (divine glory), xšaça (royal authority)).
+
+OUTPUT
+Return ONLY valid JSON (no extra text, no code fences) with these keys exactly:
+{{
+  "kingdom": "Specific Iranian realm (e.g., Achaemenid, Median, Parthian, Sogdian city-states, Sasanian)",
+  "locale": "City/locale (e.g., Hagmatāna / Hamadan (Ecbatana))",
+  "role": "Clear role/job title in that kingdom tied to traits/hobby",
+  "favorite_food": "A plausible dish or staple for that region/era",
+  "hobby": "A concrete hobby past-time tied to inputs",
+  "friends": "A short phrase describing your social circle (e.g., caravan merchants, scribes, archers)",
+  "titles": ["Short epithets or honorifics"],
+  "symbols": ["2–4 meaningful symbols"],
+  "artifact": "One signature item you carry/use",
+  "short_story": "4–6 sentences: a small moment from your life in that setting; grounded and readable.",
+  "backstory": "5–8 sentences: who you are, how you fit into the realm, and how traits map to your role.",
+  "motto": "A short motto that fits your persona"
+}}
 """
 
 # ---------- Generators with auto-retry ----------
 
-def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
-    if not name or not region:
-        raise ValueError("Both name and region are required.")
-    prompt = _build_prompt(name, region, style)
-
-    max_tries = 3
-    last_text = ""
-
-    for attempt in range(max_tries):
-        if PROVIDER == "openai":
-            resp = openai_client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.85,
-                max_tokens=320,
-            )
-            draft = resp.choices[0].message.content.strip()
-        elif PROVIDER == "groq":
-            resp = groq_client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.85,
-                max_tokens=320,
-            )
-            draft = resp.choices[0].message.content.strip()
-        else:
-            raise RuntimeError("No valid provider configured.")
-
-        cleaned = sanitize_non_iranian(draft)
-        cleaned = prefer_persian_forms(cleaned)
-        last_text = cleaned
-
-        if not contains_banned(cleaned):
-            return cleaned
-
-        # tighten constraints for next attempt
-        prompt += (
-            "\n\nREVISION INSTRUCTIONS: Your previous draft included forbidden Indic terms. "
-            "Regenerate the scroll using ONLY Iranian terminology; strictly obey the forbidden list."
-        )
-
-    return last_text  # fallback after retries
-
-def generate_parsverse_profile(name: str, region: str, age: int, gender: str, traits: list[str], hobby: str, style: str = "Epic") -> dict:
+def generate_parsverse_profile(
+    name: str,
+    region: str,
+    age: int,
+    gender: str,
+    traits: list[str],
+    hobby: str,
+    style: str = "Epic"
+) -> dict:
     if not name or not region:
         raise ValueError("Name and region are required.")
     prompt = _build_profile_prompt(name, region, age, gender, traits, hobby, style)
@@ -303,16 +277,16 @@ def generate_parsverse_profile(name: str, region: str, age: int, gender: str, tr
             resp = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.8,
-                max_tokens=900,
+                temperature=0.7,
+                max_tokens=950,
             )
             raw = resp.choices[0].message.content.strip()
         elif PROVIDER == "groq":
             resp = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.8,
-                max_tokens=900,
+                temperature=0.7,
+                max_tokens=950,
             )
             raw = resp.choices[0].message.content.strip()
         else:
@@ -326,7 +300,7 @@ def generate_parsverse_profile(name: str, region: str, age: int, gender: str, tr
         if raw_clean.endswith("```"):
             raw_clean = raw_clean[:-3].strip()
 
-        # parse JSON
+        # parse JSON; if fails, wrap as backstory fallback
         try:
             data = json.loads(raw_clean)
         except Exception:
@@ -334,24 +308,32 @@ def generate_parsverse_profile(name: str, region: str, age: int, gender: str, tr
                 "kingdom": "",
                 "locale": "",
                 "role": "",
+                "favorite_food": "",
+                "hobby": hobby,
+                "friends": "",
                 "titles": [],
                 "symbols": [],
                 "artifact": "",
+                "short_story": "",
                 "backstory": raw_clean,
                 "motto": ""
             }
 
-        # clean fields
+        # Clean/sanitize fields
         def clean(s: str) -> str:
             if not isinstance(s, str): return s
             s = sanitize_non_iranian(s)
             s = prefer_persian_forms(s)
             return s
 
-        for key in ["kingdom", "locale", "role", "artifact", "backstory", "motto"]:
+        for key in [
+            "kingdom","locale","role","favorite_food","hobby",
+            "friends","artifact","short_story","backstory","motto"
+        ]:
             if key in data and isinstance(data[key], str):
                 data[key] = clean(data[key])
-        for key in ["titles", "symbols"]:
+
+        for key in ["titles","symbols"]:
             if key in data and isinstance(data[key], list):
                 data[key] = [clean(x) for x in data[key]]
 
@@ -359,8 +341,9 @@ def generate_parsverse_profile(name: str, region: str, age: int, gender: str, tr
         last_data = data
         last_text = " ".join([
             data.get("kingdom",""), data.get("locale",""), data.get("role",""),
+            data.get("favorite_food",""), data.get("hobby",""), data.get("friends",""),
             " ".join(data.get("titles",[])), " ".join(data.get("symbols",[])),
-            data.get("artifact",""), data.get("backstory",""), data.get("motto","")
+            data.get("artifact",""), data.get("short_story",""), data.get("backstory",""), data.get("motto","")
         ])
 
         if not contains_banned(last_text):
@@ -372,7 +355,10 @@ def generate_parsverse_profile(name: str, region: str, age: int, gender: str, tr
             "Regenerate STRICT JSON using ONLY Iranian terminology; strictly obey the forbidden list."
         )
 
-    return last_data or {"backstory": "Generation failed after retries. Please try again."}
+    return last_data or {
+        "backstory": "Generation failed after retries. Please try again.",
+        "short_story": ""
+    }
 
 # ---------- Local smoke test ----------
 if __name__ == "__main__":

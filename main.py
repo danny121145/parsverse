@@ -298,6 +298,20 @@ if d_submit:
             st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
             st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
 
+        # Quick facts (add under the existing columns)
+        st.markdown("---")
+        st.markdown(f"**Favorite food:** {profile.get('favorite_food','')}")
+        st.markdown(f"**Hobby:** {profile.get('hobby','')}")
+        st.markdown(f"**Friends:** {profile.get('friends','')}")
+
+        # Short story block (more readable)
+        st.markdown("### Short story")
+        st.markdown(
+            f"<div class='pars-scroll'><p style='font-size:17px;line-height:1.7;white-space:pre-wrap;'>{profile.get('short_story','')}</p></div>",
+            unsafe_allow_html=True
+        )
+
+
         # Downloads
         persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
         st.markdown("---")
