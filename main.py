@@ -10,7 +10,7 @@ st.set_page_config(page_title="ParsVerse – Myth & Persona", layout="centered")
 
 # ---------- Header ----------
 st.markdown("""
-<h1 style="text-align:center;margin-bottom:0;">🏛️ ParsVerse</h1>
+<h1 style="text-align:center;margin-bottom:0;"> ParsVerse</h1>
 <p style="text-align:center;margin-top:6px;">
 Create your Persian-inspired <strong>myth</strong> or a <strong>detailed persona dossier</strong> (kingdom, locale, role, backstory).
 </p>
@@ -19,7 +19,7 @@ Create your Persian-inspired <strong>myth</strong> or a <strong>detailed persona
 st.divider()
 
 # ========== Quick Myth ==========
-with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
+with st.expander(" Quick Myth (simple scroll)", expanded=True):
     with st.form("quick_myth_form"):
         q_col1, q_col2 = st.columns([1, 1])
         with q_col1:
@@ -53,7 +53,7 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
 st.divider()
 
 # ========== Detailed Persona ==========
-st.markdown("## 🔎 Detailed Persona (kingdom, locale, role + backstory)")
+st.markdown("##  Detailed Persona (kingdom, locale, role + backstory)")
 
 with st.form("detail_persona_form"):
     d_col1, d_col2 = st.columns(2)
@@ -95,7 +95,7 @@ if d_submit:
         st.markdown("""
         <div style="background:#fdf6e3;padding:22px;border:2px solid #c2b280;border-radius:12px;
                     font-family:Georgia,serif;box-shadow:0 8px 24px rgba(0,0,0,0.06);">
-            <h3 style="text-align:center;margin-top:0;">👑 Persona Dossier</h3>
+            <h3 style="text-align:center;margin-top:0;"> Persona Dossier</h3>
         </div>
         """, unsafe_allow_html=True)
 
