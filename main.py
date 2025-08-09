@@ -10,88 +10,76 @@ from story_generator import (
     REGIONS,
 )
 
-# ------------------ Config & Branding ------------------
-APP_URL = os.getenv("APP_URL", "").strip()  
+# ------------------ Config ------------------
+APP_URL = os.getenv("APP_URL", "").strip()  # set in Streamlit Secrets for share links
 st.set_page_config(page_title="ParsVerse – Myth & Persona", page_icon="🏛️", layout="centered")
 
+# ------------------ Brand CSS (Persian turquoise + gold) ------------------
 BRAND_CSS = """
 <style>
 :root{
-  --bg:#fffdf7;
-  --card:#fdf6e3;
-  --ink:#2a2a2a;
-  --gold:#c2b280;
-  --accent:#0f766e; /* turquoise-ish */
+  --bg:#fffdf7;           /* parchment cream */
+  --card:#fcf5e6;         /* parchment card */
+  --ink:#12222a;          /* deep ink */
+  --gold:#c2a14d;         /* Persian gold */
+  --turq:#1f8a8a;         /* Persian turquoise */
+  --turq-deep:#0f6d6d;
 }
-html, body, [data-testid="stAppViewContainer"]{
-  background:var(--bg);
+html, body, [data-testid="stAppViewContainer"]{ background:var(--bg); color:var(--ink); }
+.block-container{ padding-top:2rem; }
+
+/* Header */
+.brand-wrap{ display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:6px; }
+.brand-title{ font-size:44px; font-weight:800; letter-spacing:.4px; margin:0; color:var(--turq-deep); }
+.brand-sub{ text-align:center; margin:6px 0 0 0; color:#213b40; }
+.badge{
+  display:inline-block; padding:4px 10px; border:1px solid var(--gold);
+  border-radius:999px; background:#fff; font-size:12px; margin-left:8px;
 }
-.block-container{
-  padding-top:2rem;
-}
+
+/* Cards */
 .pars-card{
-  background:var(--card);
-  padding:22px;
-  border:2px solid var(--gold);
-  border-radius:14px;
-  font-family:Georgia,serif;
-  box-shadow:0 8px 24px rgba(0,0,0,0.06);
+  background:var(--card); padding:22px; border:2px solid var(--gold);
+  border-radius:14px; font-family:Georgia,serif; box-shadow:0 8px 24px rgba(0,0,0,0.06);
 }
 .pars-scroll{
-  background:var(--card);
-  padding:18px;
-  border:1px solid #d8caa1;
-  border-radius:10px;
-  font-family:Georgia,serif;
+  background:var(--card); padding:18px; border:1px solid #d8caa1;
+  border-radius:10px; font-family:Georgia,serif;
 }
-.badge{
-  display:inline-block;
-  padding:4px 10px;
-  border:1px solid var(--gold);
-  border-radius:999px;
-  background:#fff;
-  font-size:12px;
-  margin-left:8px;
-}
-.sharebar a{
-  text-decoration:none;
-  margin-right:10px;
-}
+
+/* Dividers & links */
+.divider{height:1px;background:linear-gradient(90deg, transparent, var(--gold), transparent);margin:18px 0;}
+a, .sharebar a{ color:var(--turq-deep); text-decoration:none; }
+.sharebar a:hover{ text-decoration:underline; }
+
+/* Buttons */
 .copybtn{
-  border:1px solid var(--gold);
-  padding:6px 10px;
-  border-radius:8px;
-  background:#fff;
-  cursor:pointer;
+  border:1px solid var(--gold); padding:6px 10px; border-radius:8px; background:#fff; cursor:pointer;
 }
-h1.title{
-  text-align:center;margin:0 0 6px 0;
+
+/* Footer */
+.footer{
+  margin-top:28px; padding:10px 12px; border-top:1px solid var(--gold);
+  text-align:center; color:#32565b; font-size:13px;
 }
-.subtitle{
-  text-align:center;margin-top:6px;margin-bottom:0;
-}
-.divider{height:1px;background:#e6dcc0;margin:18px 0;}
 </style>
 """
 st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
 # ------------------ Tiny global counter (file-based) ------------------
 COUNTER_FILE = os.path.join(os.path.dirname(__file__), "counter.json")
-
 def _load_counts():
     try:
         with open(COUNTER_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"total": 0, "myths": 0, "personas": 0}
-
 def _save_counts(data):
     try:
         with open(COUNTER_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception:
-        pass  # Cloud environments may be ephemeral; it's fine for MVP
-
+        pass  # ephemeral on Cloud is fine for MVP
 def bump_counter(kind):
     data = _load_counts()
     data["total"] = data.get("total", 0) + 1
@@ -101,28 +89,45 @@ def bump_counter(kind):
         data["personas"] = data.get("personas", 0) + 1
     _save_counts(data)
     return data
-
 GLOBAL_COUNTS = _load_counts()
 
 # ------------------ Did you know facts ------------------
 FACTS = [
     "“Farr / Farrah (xvarənah)” denotes divine royal glory in Iranian tradition.",
-    "Takht-e Jamshid (Parsa/Persepolis) carries trilingual inscriptions in Old Persian, Elamite, and Babylonian.",
+    "Takht-e Jamshid (Parsa/Persepolis) bears Old Persian, Elamite, and Babylonian inscriptions.",
     "Kourosh (Cyrus) founded Pasargad (Pasargadae), the early Achaemenid capital.",
     "Hagmatāna (Hamadan/Ecbatana) is tied to Median royal heritage.",
-    "Tisfun (Ctesiphon) was a major imperial capital on the Tigris in late antique Iran.",
-    "The Shahnameh preserves epic cycles of Iranian heroes like Rostam from Sistan/Zabulistan.",
-    "Sogdian merchants linked Iran to the Silk Roads via Samarkand and Bukhara.",
+    "Tisfun (Ctesiphon) served as a late antique imperial capital on the Tigris.",
+    "The Shahnameh preserves epic cycles like Rostam of Sistan/Zabulistan.",
+    "Sogdian merchants linked Iran to Silk Roads via Samarkand and Bukhara.",
 ]
 
-# ------------------ Header ------------------
-st.markdown("""
-<h1 class="title">🏛️ ParsVerse</h1>
-<p class="subtitle">Create your Persian-inspired <strong>myth</strong> or a <strong>detailed persona</strong> (kingdom, locale, role, backstory).
-<span class="badge">Total legends woven: {total}</span>
+# ------------------ Header with inline SVG mark ------------------
+SVG_LOGO = """
+<svg width="42" height="42" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="ParsVerse logo">
+  <defs>
+    <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1f8a8a"/>
+      <stop offset="100%" stop-color="#0f6d6d"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#g)" stroke="#c2a14d" stroke-width="3"/>
+  <!-- stylized cypress / column -->
+  <path d="M32 12 C28 20, 28 26, 32 30 C36 26, 36 20, 32 12 Z" fill="#fff"/>
+  <rect x="30.8" y="30" width="2.4" height="18" fill="#fff"/>
+  <circle cx="32" cy="52" r="3" fill="#c2a14d"/>
+</svg>
+"""
+st.markdown(f"""
+<div class="brand-wrap">
+  {SVG_LOGO}
+  <h1 class="brand-title">ParsVerse</h1>
+</div>
+<p class="brand-sub">
+  Create your Persian-inspired <strong>myth</strong> or a <strong>detailed persona</strong> (kingdom, locale, role, backstory).
+  <span class="badge">Total legends woven: {GLOBAL_COUNTS.get('total', 0)}</span>
 </p>
-""".format(total=GLOBAL_COUNTS.get("total", 0)), unsafe_allow_html=True)
-
+""", unsafe_allow_html=True)
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
 # ------------------ Quick Myth ------------------
@@ -133,7 +138,6 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             q_name = st.text_input("Your name", key="q_name")
         with q_col2:
             q_region = st.selectbox("Historical region", REGIONS, index=0, key="q_region")
-
         q_style = st.selectbox("Style / tone", ["Epic", "Mystic", "Royal", "Poet"], index=0, key="q_style")
         q_submit = st.form_submit_button("Generate Myth")
 
@@ -161,21 +165,20 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             quoted = urllib.parse.quote_plus(f"My ParsVerse myth ✨ — {APP_URL}" if APP_URL else "My ParsVerse myth ✨")
             tw_url = f"https://twitter.com/intent/tweet?text={quoted}"
             st.markdown(
-                f"<div class='sharebar' style='margin-top:8px;'>"
-                f"<a href='{tw_url}' target='_blank'>🐦 Share on X</a>"
-                f"</div>",
+                f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>",
                 unsafe_allow_html=True
             )
-
-            # Copy to clipboard (simple JS)
             st.markdown("""
             <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('mythtext').innerText)">Copy myth to clipboard</button>
             <pre id="mythtext" style="position:absolute;left:-9999px;white-space:pre-wrap;">{}</pre>
             """.format(myth.replace("<","&lt;").replace(">","&gt;")), unsafe_allow_html=True)
 
-            # bump counters
+            # bump counters & refresh badge
             GLOBAL_COUNTS = bump_counter("myth")
-            st.rerun()  # refresh the header badge
+            if hasattr(st, "rerun"):
+                st.rerun()
+            elif hasattr(st, "experimental_rerun"):
+                st.rerun()
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -218,11 +221,9 @@ if d_submit:
                 style=d_style
             )
 
-        # Render persona card
         st.success("Your persona is ready!")
         st.markdown('<div class="pars-card"><h3 style="text-align:center;margin-top:0;">👑 Persona Dossier</h3></div>', unsafe_allow_html=True)
 
-        # Title block
         role = profile.get("role", "") or "Citizen"
         locale = profile.get("locale", "") or d_region
         titles = profile.get("titles", []) or []
@@ -232,10 +233,8 @@ if d_submit:
             unsafe_allow_html=True
         )
 
-        # Backstory
         st.markdown(f"<div class='pars-scroll'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{profile.get('backstory','')}</p></div>", unsafe_allow_html=True)
 
-        # Quick facts
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -248,7 +247,7 @@ if d_submit:
             st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
             st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
 
-        # ---- Downloads ----
+        # Downloads
         persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
         st.markdown("---")
         dl_col1, dl_col2 = st.columns(2)
@@ -280,18 +279,21 @@ Backstory:
                 mime="text/plain"
             )
 
-        # ---- Share ----
+        # Share
         share_text = f"My ParsVerse persona: {role} of {locale} — {APP_URL}" if APP_URL else f"My ParsVerse persona: {role} of {locale}"
         tw_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote_plus(share_text)}"
-        st.markdown(
-            f"<div class='sharebar' style='margin-top:8px;'>"
-            f"<a href='{tw_url}' target='_blank'>🐦 Share on X</a>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
 
-        # bump counters
+        # bump counters & refresh badge
         GLOBAL_COUNTS = bump_counter("persona")
-        st.rerun()  # refresh header badge
+        if hasattr(st, "rerun"):
+            st.rerun()
+        elif hasattr(st, "experimental_rerun"):
+            st.rerun()
 
-st.caption("Tip: Traits + hobby/work guide the role, while region maps to a plausible Iranian realm. Endonyms are preferred; Indic/Greek exonyms are sanitized.")
+# ------------------ Footer ------------------
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+st.markdown(
+    "<div class='footer'>Crafted with 🪶 in turquoise & gold • ParsVerse</div>",
+    unsafe_allow_html=True
+)
