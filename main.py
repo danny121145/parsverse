@@ -51,6 +51,9 @@ with st.expander(" Quick Myth (simple scroll)", expanded=True):
                 unsafe_allow_html=True
             )
             # Download myth as .txt
+            st.markdown("<div style='margin-top:8px;padding:10px;border:1px dashed #d8caa1;border-radius:10px;'>"
+            "<em>Save your legend to keep or share.</em></div>", unsafe_allow_html=True)
+
             st.download_button(
                 label="⬇️ Download Myth (.txt)",
                 data=myth.encode("utf-8"),
@@ -137,6 +140,10 @@ if d_submit:
             st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
             st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
 
+
+        st.markdown("<div style='margin-top:8px;padding:10px;border:1px dashed #d8caa1;border-radius:10px;'>"
+            "<em>Save your legend to keep or share.</em></div>", unsafe_allow_html=True)
+        
         persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
 
         st.markdown("---")
