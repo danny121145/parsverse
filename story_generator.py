@@ -255,6 +255,73 @@ Return ONLY valid JSON (no extra text, no code fences) with these keys exactly:
 
 # ---------- Generators with auto-retry ----------
 
+def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
+    if not name or not region:
+        raise ValueError("Both name and region are required.")
+
+    # Build a concise scroll prompt that matches your constraints
+    hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
+    translit_note = (
+        "Prefer IRANIAN endonyms; if you include a Greek/Latin exonym, show it once in parentheses."
+        if TRANSLIT_MODE == "modern" else
+        "Use Old Persian/Avestan scholarly forms; avoid Greek/Latin exonyms."
+    )
+    prompt = f"""
+You are a cultural historian and storyteller of ancient Iran.
+Write a short persona scroll (4–5 sentences) about {name}, set in the historical region of {region}.
+
+Context for accuracy: {hint}
+Use a few region-appropriate motifs/terms when relevant: {lex}
+
+STRICT RULES:
+- Use ONLY Iranian/Persian terminology (Old Persian, Avestan, Middle Persian/Pahlavi, New Persian).
+- {translit_note}
+- DO NOT use non-Iranian/Indic terms. {FORBIDDEN_LINE}
+- Prefer clear modern English; if you use a Persian term, gloss it once in brackets (e.g., farrah/farr (divine glory), xšaça (royal authority)).
+- Keep the tone {style.lower()} and culturally faithful to Iranian history/myth.
+- Avoid anachronisms and cross-cultural mixing unless explicitly Persianized and accurate.
+- Return ONLY the scroll text (no headings).
+""".strip()
+
+    max_tries = 3
+    last_text = ""
+
+    for _ in range(max_tries):
+        if PROVIDER == "openai":
+            resp = openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.85,
+                max_tokens=320,
+            )
+            draft = resp.choices[0].message.content.strip()
+        elif PROVIDER == "groq":
+            resp = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.85,
+                max_tokens=320,
+            )
+            draft = resp.choices[0].message.content.strip()
+        else:
+            raise RuntimeError("No valid provider configured.")
+
+        cleaned = sanitize_non_iranian(draft)
+        cleaned = prefer_persian_forms(cleaned)
+        last_text = cleaned
+
+        if not contains_banned(cleaned):
+            return cleaned
+
+        # tighten constraints and retry
+        prompt += (
+            "\n\nREVISION INSTRUCTIONS: Your previous draft included forbidden Indic terms. "
+            "Regenerate the scroll using ONLY Iranian terminology; strictly obey the forbidden list."
+        )
+
+    return last_text  # fallback after retries
+
 def generate_parsverse_profile(
     name: str,
     region: str,
