@@ -1,4 +1,5 @@
 # main.py
+import json
 import streamlit as st
 from story_generator import (
     generate_parsverse_myth,
@@ -48,6 +49,13 @@ with st.expander(" Quick Myth (simple scroll)", expanded=True):
                 f"<div style='background:#fdf6e3;padding:18px;border:1px solid #d8caa1;border-radius:10px;"
                 f"font-family:Georgia,serif;'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{myth}</p></div>",
                 unsafe_allow_html=True
+            )
+            # Download myth as .txt
+            st.download_button(
+                label="⬇️ Download Myth (.txt)",
+                data=myth.encode("utf-8"),
+                file_name=f"parsverse_myth_{q_name or 'anon'}.txt",
+                mime="text/plain"
             )
 
 st.divider()
@@ -128,5 +136,40 @@ if d_submit:
         with c3:
             st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
             st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
+
+        persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
+
+        st.markdown("---")
+        dl_col1, dl_col2 = st.columns(2)
+
+        with dl_col1:
+            st.download_button(
+                label="⬇️ Download Persona JSON",
+                data=persona_json_str.encode("utf-8"),
+                file_name=f"parsverse_persona_{d_name or 'anon'}.json",
+                mime="application/json"
+            )
+
+        with dl_col2:
+            persona_txt = f"""ParsVerse Persona
+Name: {d_name}
+Kingdom: {profile.get('kingdom','')}
+Locale: {profile.get('locale','')}
+Role: {profile.get('role','')}
+Titles: {', '.join(profile.get('titles', []))}
+Symbols: {', '.join(profile.get('symbols', []))}
+Artifact: {profile.get('artifact','')}
+Motto: {profile.get('motto','')}
+
+Backstory:
+{profile.get('backstory','')}
+"""
+            st.download_button(
+                label="⬇️ Download Persona (.txt)",
+                data=persona_txt.encode("utf-8"),
+                file_name=f"parsverse_persona_{d_name or 'anon'}.txt",
+                mime="text/plain"
+            )
+
 
 st.caption("Tip: Traits + hobby/work guide the role, while region maps to a plausible Iranian realm. Endonyms are preferred; Indic/Greek exonyms are sanitized.")
