@@ -1,5 +1,6 @@
 # main.py
 import os
+import csv
 import json
 import random
 import urllib.parse
@@ -80,6 +81,13 @@ def _save_counts(data):
             json.dump(data, f)
     except Exception:
         pass  # ephemeral on Cloud is fine for MVP
+
+GLOBAL_COUNTS = _load_counts()
+
+# Keep counters in session so header updates without rerun
+if "counts" not in st.session_state:
+    st.session_state.counts = GLOBAL_COUNTS
+
 def bump_counter(kind):
     data = _load_counts()
     data["total"] = data.get("total", 0) + 1
@@ -88,14 +96,45 @@ def bump_counter(kind):
     elif kind == "persona":
         data["personas"] = data.get("personas", 0) + 1
     _save_counts(data)
-    # also update session (so header updates without rerun)
-    st.session_state.counts = data
+    st.session_state.counts = data  # live update header badge
     return data
 
-GLOBAL_COUNTS = _load_counts()
-# Keep counters in session so we can update the header without rerun
-if "counts" not in st.session_state:
-    st.session_state.counts = GLOBAL_COUNTS
+# ------------------ Session usage limits ------------------
+MYTH_LIMIT = 5
+PERSONA_LIMIT = 3
+
+if "quota" not in st.session_state:
+    st.session_state.quota = {"myth": 0, "persona": 0}
+
+def can_make(kind: str) -> bool:
+    used = st.session_state.quota.get(kind, 0)
+    cap = MYTH_LIMIT if kind == "myth" else PERSONA_LIMIT
+    return used < cap
+
+def note_usage(kind: str):
+    st.session_state.quota[kind] = st.session_state.quota.get(kind, 0) + 1
+
+def remaining(kind: str) -> int:
+    used = st.session_state.quota.get(kind, 0)
+    cap = MYTH_LIMIT if kind == "myth" else PERSONA_LIMIT
+    return max(0, cap - used)
+
+# ------------------ Session history ------------------
+if "history" not in st.session_state:
+    st.session_state.history = {"myths": [], "personas": []}
+
+# ------------------ Analytics CSV (lightweight) ------------------
+LOG_FILE = os.path.join(os.path.dirname(__file__), "analytics.csv")
+def log_event(kind, payload: dict):
+    try:
+        new = {"kind": kind, **payload}
+        write_header = not os.path.exists(LOG_FILE)
+        with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=new.keys())
+            if write_header: w.writeheader()
+            w.writerow(new)
+    except Exception:
+        pass  # fine on ephemeral Cloud
 
 # ------------------ Did you know facts ------------------
 FACTS = [
@@ -124,6 +163,7 @@ SVG_LOGO = """
   <circle cx="32" cy="52" r="3" fill="#c2a14d"/>
 </svg>
 """
+
 st.markdown(f"""
 <div class="brand-wrap">
   {SVG_LOGO}
@@ -145,11 +185,14 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
         with q_col2:
             q_region = st.selectbox("Historical region", REGIONS, index=0, key="q_region")
         q_style = st.selectbox("Style / tone", ["Epic", "Mystic", "Royal", "Poet"], index=0, key="q_style")
+        st.caption(f"Remaining this session: {remaining('myth')} myth generations")
         q_submit = st.form_submit_button("Generate Myth")
 
     if q_submit:
         if not q_name or not q_region:
             st.warning("Please enter a name and choose a region.")
+        elif not can_make("myth"):
+            st.error("You’ve reached the session limit for myths. Please come back later!")
         else:
             tip = random.choice(FACTS)
             with st.spinner(f"Weaving your legend… (Did you know? {tip})"):
@@ -170,17 +213,21 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             # Share to X (Twitter) + copy to clipboard
             quoted = urllib.parse.quote_plus(f"My ParsVerse myth ✨ — {APP_URL}" if APP_URL else "My ParsVerse myth ✨")
             tw_url = f"https://twitter.com/intent/tweet?text={quoted}"
-            st.markdown(
-                f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
             st.markdown("""
             <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('mythtext').innerText)">Copy myth to clipboard</button>
             <pre id="mythtext" style="position:absolute;left:-9999px;white-space:pre-wrap;">{}</pre>
             """.format(myth.replace("<","&lt;").replace(">","&gt;")), unsafe_allow_html=True)
 
-            # bump counters & refresh badge
-            GLOBAL_COUNTS = bump_counter("myth")
+            # History + counters + quota
+            st.session_state.history["myths"].append({
+                "name": q_name, "region": q_region, "style": q_style, "text": myth
+            })
+            note_usage("myth")
+            bump_counter("myth")
+            log_event("myth", {"name": q_name, "region": q_region, "style": q_style})
+
+            st.button("🔁 Generate another myth", key="regen_myth")
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -204,12 +251,14 @@ with st.form("detail_persona_form"):
         default=["brave", "curious"],
         key="d_traits"
     )
-
+    st.caption(f"Remaining this session: {remaining('persona')} persona generations")
     d_submit = st.form_submit_button("Generate Detailed Persona")
 
 if d_submit:
     if not d_name or not d_region:
         st.warning("Please enter a name and choose a region.")
+    elif not can_make("persona"):
+        st.error("You’ve reached the session limit for personas. Please come back later!")
     else:
         tip = random.choice(FACTS)
         with st.spinner(f"Consulting the court archives… (Did you know? {tip})"):
@@ -286,12 +335,39 @@ Backstory:
         tw_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote_plus(share_text)}"
         st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
 
-        # bump counters & refresh badge
-        GLOBAL_COUNTS = bump_counter("persona")
+        # History + counters + quota + analytics
+        st.session_state.history["personas"].append({
+            "name": d_name, "region": d_region, "age": int(d_age),
+            "gender": d_gender, "traits": d_traits, "hobby": d_hobby,
+            "profile": profile
+        })
+        note_usage("persona")
+        bump_counter("persona")
+        log_event("persona", {"name": d_name, "region": d_region, "age": int(d_age), "role": profile.get("role","")})
+
+        st.button("🔁 Generate another persona", key="regen_persona")
+
+# ------------------ Session History ------------------
+with st.expander("🗂️ Your session history"):
+    if st.session_state.history["myths"]:
+        st.markdown("**Myths (last 5)**")
+        for i, m in enumerate(reversed(st.session_state.history["myths"][-5:]), 1):
+            st.markdown(f"{i}. *{m['name']}* — {m['region']} / {m['style']}")
+            st.code(m["text"])
+    if st.session_state.history["personas"]:
+        st.markdown("**Personas (last 5)**")
+        for i, p in enumerate(reversed(st.session_state.history["personas"][-5:]), 1):
+            meta = p["profile"]
+            st.markdown(f"{i}. *{p['name']}* — {meta.get('role','')} of {meta.get('locale','')}")
+            st.code(meta.get("backstory",""))
+
+# ------------------ About ------------------
+with st.expander("ℹ️ About ParsVerse"):
+    st.markdown("""
+ParsVerse crafts Iranian-inspired myths and personas. We prefer **Iranian endonyms** and sanitize non-Iranian terms.
+Results are generated by AI with strict prompt constraints — treat them as creative storytelling, not academic citations.
+""")
 
 # ------------------ Footer ------------------
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown(
-    "<div class='footer'>Crafted with 🪶 in turquoise & gold • ParsVerse</div>",
-    unsafe_allow_html=True
-)
+st.markdown("<div class='footer'>Crafted with 🪶 in turquoise & gold • ParsVerse</div>", unsafe_allow_html=True)

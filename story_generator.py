@@ -53,6 +53,20 @@ REGION_HINTS = {
     "Elam": "Southwestern Iranian plateau prior to Achaemenids; Elamite heritage; Shush (Susa); brickwork and bull imagery."
 }
 
+# NEW: Region lexicon (nudges for local flavor)
+REGION_LEXICON = {
+    "Persis": ["Parsa", "Pasargad", "Takht-e Jamshid", "farrah/farr", "xšaça"],
+    "Media": ["Hagmatāna", "Hamadan", "Median highlands", "early satrapy"],
+    "Parthia": ["Nisa", "cataphract", "steppe", "satrap", "composite bow"],
+    "Sogdia": ["Samarkand", "Bukhara", "caravan", "merchant seals"],
+    "Khwarezm": ["Oxus", "Amu Darya", "fortress-city", "irrigation"],
+    "Mazandaran": ["Hyrcanian forest", "Caspian mist", "Gilan"],
+    "Khorasan": ["frontier", "sunrise", "desert wind", "oasis", "caravan"],
+    "Zagros Mountains": ["high passes", "oak woodlands", "fortress"],
+    "Caspian Sea": ["reeds", "fishing", "humid coast"],
+    "Elam": ["Shush", "brick relief", "bull imagery"],
+}
+
 REGION_TO_REALMS = {
     "Persis": ["Achaemenid", "Sasanian"],
     "Media": ["Median", "Achaemenid (early)"],
@@ -156,6 +170,7 @@ FORBIDDEN_LINE = (
 
 def _build_prompt(name: str, region: str, style: str = "Epic") -> str:
     hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
     translit_note = (
         "Prefer IRANIAN endonyms; if you include a Greek/Latin exonym, show it once in parentheses."
         if TRANSLIT_MODE == "modern" else
@@ -166,6 +181,7 @@ You are a cultural historian and storyteller of ancient Iran.
 Write a short persona scroll (4–5 sentences) about {name}, set in the historical region of {region}.
 
 Context for accuracy: {hint}
+Use a few region-appropriate motifs/terms when relevant: {lex}
 
 STRICT RULES:
 - Use ONLY Iranian/Persian terminology (Old Persian, Avestan, Middle Persian/Pahlavi, New Persian).
@@ -177,8 +193,17 @@ STRICT RULES:
 - Return ONLY the scroll text (no headings).
 """
 
-def _build_profile_prompt(name: str, region: str, age: int, gender: str, traits: list[str], hobby: str, style: str) -> str:
+def _build_profile_prompt(
+    name: str,
+    region: str,
+    age: int,
+    gender: str,
+    traits: list[str],
+    hobby: str,
+    style: str
+) -> str:
     region_hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
     realms = REGION_TO_REALMS.get(region, ["Iranian polity"])
     traits_str = ", ".join(traits) if traits else "balanced"
     translit_note = (
@@ -196,6 +221,7 @@ You are a cultural historian and storyteller of ancient Iran. Create a **structu
 - Hobby/Work: {hobby}
 
 Context for accuracy: {region_hint}
+Use a few region-appropriate motifs/terms when relevant: {lex}
 Likely realms to choose from (pick the best fit): {", ".join(realms)}.
 
 STRICT RULES:
