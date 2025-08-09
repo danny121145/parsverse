@@ -88,8 +88,14 @@ def bump_counter(kind):
     elif kind == "persona":
         data["personas"] = data.get("personas", 0) + 1
     _save_counts(data)
+    # also update session (so header updates without rerun)
+    st.session_state.counts = data
     return data
+
 GLOBAL_COUNTS = _load_counts()
+# Keep counters in session so we can update the header without rerun
+if "counts" not in st.session_state:
+    st.session_state.counts = GLOBAL_COUNTS
 
 # ------------------ Did you know facts ------------------
 FACTS = [
@@ -125,7 +131,7 @@ st.markdown(f"""
 </div>
 <p class="brand-sub">
   Create your Persian-inspired <strong>myth</strong> or a <strong>detailed persona</strong> (kingdom, locale, role, backstory).
-  <span class="badge">Total legends woven: {GLOBAL_COUNTS.get('total', 0)}</span>
+  <span class="badge">Total legends woven: {st.session_state.counts.get('total', 0)}</span>
 </p>
 """, unsafe_allow_html=True)
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -175,10 +181,6 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
 
             # bump counters & refresh badge
             GLOBAL_COUNTS = bump_counter("myth")
-            if hasattr(st, "rerun"):
-                st.rerun()
-            elif hasattr(st, "experimental_rerun"):
-                st.rerun()
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -286,10 +288,6 @@ Backstory:
 
         # bump counters & refresh badge
         GLOBAL_COUNTS = bump_counter("persona")
-        if hasattr(st, "rerun"):
-            st.rerun()
-        elif hasattr(st, "experimental_rerun"):
-            st.rerun()
 
 # ------------------ Footer ------------------
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
