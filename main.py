@@ -178,6 +178,36 @@ def format_persona_persian(data: dict, *, name: str | None = None) -> str:
 </div>
 """.strip()
 
+def format_myth_persian(myth_text: str, *, name: str = "", region: str = "", style: str = "") -> str:
+    header_line = f"Scroll of {name}" if name else "ParsVerse Scroll"
+    chips_html = "".join([
+        f"<span class='chip'>{c}</span>" for c in [region, style] if c
+    ])
+    return f"""
+<div class="illum-card">
+  <div class="illum-ornament"></div>
+  <div class="illum-header">
+    <div class="illum-title">{header_line}</div>
+    {'<p class="illum-sub">'+region+'</p>' if region else ''}
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div class="illum-grid">
+    <div><span class="illum-label">Region:</span><br>{region or '-'}</div>
+    <div><span class="illum-label">Tone:</span><br>{style or '-'}</div>
+    <div><span class="illum-label">Badges:</span><br><div class="chips">{chips_html}</div></div>
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Myth</div>
+    <div class="illum-scroll" id="myth-text">{myth_text}</div>
+  </div>
+</div>
+""".strip()
+
 # ------------------ Tiny global counter (file-based) ------------------
 COUNTER_FILE = os.path.join(os.path.dirname(__file__), "counter.json")
 def _load_counts():
@@ -313,8 +343,17 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
                 myth = generate_parsverse_myth(q_name, q_region, q_style)
 
             st.success("Your scroll is ready!")
-            st.markdown('<div class="pars-card"><h3 style="text-align:center;margin-top:0;">🪶 ParsVerse Scroll</h3></div>', unsafe_allow_html=True)
-            st.markdown(f"<div class='pars-scroll'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{myth}</p></div>", unsafe_allow_html=True)
+            st.markdown(
+                format_myth_persian(myth, name=q_name, region=q_region, style=q_style),
+                unsafe_allow_html=True
+            )
+
+             # Copy button for illuminated myth card
+            st.markdown("""
+            <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('myth-text').innerText)">
+                Copy myth to clipboard
+            </button>
+            """, unsafe_allow_html=True)
 
             if st.button("🔄 Try another wording", key="myth_variant"):
                 tip = random.choice(FACTS)
