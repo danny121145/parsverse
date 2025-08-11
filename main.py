@@ -48,26 +48,7 @@ html, body, [data-testid="stAppViewContainer"]{ background:var(--bg); color:var(
   border-radius:10px; font-family:Georgia,serif;
 }
 
-/* Dividers & links */
-.divider{height:1px;background:linear-gradient(90deg, transparent, var(--gold), transparent);margin:18px 0;}
-a, .sharebar a{ color:var(--turq-deep); text-decoration:none; }
-.sharebar a:hover{ text-decoration:underline; }
-
-/* Buttons */
-.copybtn{
-  border:1px solid var(--gold); padding:6px 10px; border-radius:8px; background:#fff; cursor:pointer;
-}
-
-/* Footer */
-.footer{
-  margin-top:28px; padding:10px 12px; border-top:1px solid var(--gold);
-  text-align:center; color:#32565b; font-size:13px;
-}
-</style>
-"""
-st.markdown(BRAND_CSS, unsafe_allow_html=True)
-PERSIAN_DECOR_CSS = """
-<style>
+/* Decorated illuminated card */
 .illum-card{
   --gold:#c2a14d; --turq:#1f8a8a; --turq-deep:#0f6d6d; --paper:#fffaf0; --ink:#102126;
   background:
@@ -122,10 +103,27 @@ PERSIAN_DECOR_CSS = """
   filter: blur(1px);
   pointer-events:none;
 }
+
+/* Dividers & links */
+.divider{height:1px;background:linear-gradient(90deg, transparent, var(--gold), transparent);margin:18px 0;}
+a, .sharebar a{ color:var(--turq-deep); text-decoration:none; }
+.sharebar a:hover{ text-decoration:underline; }
+
+/* Buttons */
+.copybtn{
+  border:1px solid var(--gold); padding:6px 10px; border-radius:8px; background:#fff; cursor:pointer;
+}
+
+/* Footer */
+.footer{
+  margin-top:28px; padding:10px 12px; border-top:1px solid var(--gold);
+  text-align:center; color:#32565b; font-size:13px;
+}
 </style>
 """
-st.markdown(PERSIAN_DECOR_CSS, unsafe_allow_html=True)
+st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
+# --------- Formatters for illuminated cards ----------
 def format_persona_persian(data: dict, *, name: str | None = None) -> str:
     titles = ", ".join(data.get("titles", [])) or ""
     symbols = data.get("symbols", [])
@@ -164,6 +162,33 @@ def format_persona_persian(data: dict, *, name: str | None = None) -> str:
 
   <div class="illum-divider"></div>
 
+  <div class="illum-grid">
+    <div>
+      <div class="illum-label" style="margin-bottom:4px;">Appearance</div>
+      <div class="illum-scroll">{data.get('appearance','')}</div>
+    </div>
+    <div>
+      <div class="illum-label" style="margin-bottom:4px;">Dwelling</div>
+      <div class="illum-scroll">{data.get('dwelling','')}</div>
+    </div>
+  </div>
+
+  <div style="height:12px;"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Daily routine</div>
+    <div class="illum-scroll">{data.get('daily_routine','')}</div>
+  </div>
+
+  <div style="height:12px;"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Festival</div>
+    <div class="illum-scroll">{data.get('festival','')}</div>
+  </div>
+
+  <div class="illum-divider"></div>
+
   <div>
     <div class="illum-label" style="margin-bottom:4px;">Short story</div>
     <div class="illum-scroll">{data.get('short_story','')}</div>
@@ -180,9 +205,7 @@ def format_persona_persian(data: dict, *, name: str | None = None) -> str:
 
 def format_myth_persian(myth_text: str, *, name: str = "", region: str = "", style: str = "") -> str:
     header_line = f"Scroll of {name}" if name else "ParsVerse Scroll"
-    chips_html = "".join([
-        f"<span class='chip'>{c}</span>" for c in [region, style] if c
-    ])
+    chips_html = "".join([f"<span class='chip'>{c}</span>" for c in [region, style] if c])
     return f"""
 <div class="illum-card">
   <div class="illum-ornament"></div>
@@ -290,7 +313,6 @@ FACTS = [
     "Parthian cataphracts were famed for heavy armor on both rider and horse.",
 ]
 
-
 # ------------------ Header with inline SVG mark ------------------
 SVG_LOGO = """
 <svg width="42" height="42" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="ParsVerse logo">
@@ -329,6 +351,12 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
         with q_col2:
             q_region = st.selectbox("Historical region", REGIONS, index=0, key="q_region")
         q_style = st.selectbox("Style / tone", ["Epic", "Mystic", "Royal", "Poet"], index=0, key="q_style")
+
+        # NEW: depth knobs
+        q_detail = st.slider("Detail level", 1, 3, 2, help="1=short, 2=medium, 3=rich")
+        q_strict = st.slider("Historical strictness", 0.0, 1.0, 0.6, 0.1, help="Higher = more historically grounded, less mythic fluff")
+        q_themes = st.text_input("Themes (comma separated, optional)", help="e.g., loyalty, water, journey")
+
         st.caption(f"Remaining this session: {remaining('myth')} myth generations")
         q_submit = st.form_submit_button("Generate Myth")
 
@@ -339,8 +367,12 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             st.error("You’ve reached the session limit for myths. Please come back later!")
         else:
             tip = random.choice(FACTS)
+            themes_list = [t.strip() for t in (q_themes or "").split(",") if t.strip()]
             with st.spinner(f"Weaving your legend… (Did you know? {tip})"):
-                myth = generate_parsverse_myth(q_name, q_region, q_style)
+                myth = generate_parsverse_myth(
+                    q_name, q_region, q_style,
+                    detail_level=q_detail, strictness=q_strict, themes=themes_list
+                )
 
             st.success("Your scroll is ready!")
             st.markdown(
@@ -348,20 +380,16 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
                 unsafe_allow_html=True
             )
 
-             # Copy button for illuminated myth card
-            st.markdown("""
-            <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('myth-text').innerText)">
-                Copy myth to clipboard
-            </button>
-            """, unsafe_allow_html=True)
-
+            # Try another wording (uses the same knobs)
             if st.button("🔄 Try another wording", key="myth_variant"):
                 tip = random.choice(FACTS)
                 with st.spinner(f"Refining the scroll… (Did you know? {tip})"):
-                    myth2 = generate_parsverse_myth(q_name, q_region, q_style)
+                    myth2 = generate_parsverse_myth(
+                        q_name, q_region, q_style,
+                        detail_level=q_detail, strictness=q_strict, themes=themes_list
+                    )
                 st.markdown(
-                    f"<div style='background:#fdf6e3;padding:18px;border:1px solid #d8caa1;border-radius:10px;"
-                    f"font-family:Georgia,serif;'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{myth2}</p></div>",
+                    format_myth_persian(myth2, name=q_name, region=q_region, style=q_style),
                     unsafe_allow_html=True
                 )
 
@@ -373,14 +401,17 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
                 mime="text/plain"
             )
 
-            # Share to X (Twitter) + copy to clipboard
+            # Copy button for illuminated myth card
+            st.markdown("""
+            <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('myth-text').innerText)">
+                Copy myth to clipboard
+            </button>
+            """, unsafe_allow_html=True)
+
+            # Share to X (Twitter)
             quoted = urllib.parse.quote_plus(f"My ParsVerse myth ✨ — {APP_URL}" if APP_URL else "My ParsVerse myth ✨")
             tw_url = f"https://twitter.com/intent/tweet?text={quoted}"
             st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
-            st.markdown("""
-            <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('mythtext').innerText)">Copy myth to clipboard</button>
-            <pre id="mythtext" style="position:absolute;left:-9999px;white-space:pre-wrap;">{}</pre>
-            """.format(myth.replace("<","&lt;").replace(">","&gt;")), unsafe_allow_html=True)
 
             # History + counters + quota
             st.session_state.history["myths"].append({
@@ -432,12 +463,13 @@ if d_submit:
                 gender=d_gender,
                 traits=d_traits,
                 hobby=d_hobby or "general civic duties",
-                style=d_style
+                style=d_style,
+                detail_level=2
             )
 
         st.success("Your persona is ready!")
         st.markdown(format_persona_persian(profile, name=d_name), unsafe_allow_html=True)
-        
+
         # Downloads
         persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
         st.markdown("---")
@@ -460,6 +492,21 @@ Symbols: {', '.join(profile.get('symbols', []))}
 Artifact: {profile.get('artifact','')}
 Motto: {profile.get('motto','')}
 
+Appearance:
+{profile.get('appearance','')}
+
+Dwelling:
+{profile.get('dwelling','')}
+
+Daily routine:
+{profile.get('daily_routine','')}
+
+Festival:
+{profile.get('festival','')}
+
+Short story:
+{profile.get('short_story','')}
+
 Backstory:
 {profile.get('backstory','')}
 """
@@ -470,10 +517,9 @@ Backstory:
                 mime="text/plain"
             )
 
-        # Share
+        # Share (define role/locale first)
         role = profile.get("role", "") or "Citizen"
         locale = profile.get("locale", "") or d_region
-
         share_text = f"My ParsVerse persona: {role} of {locale} — {APP_URL}" if APP_URL else f"My ParsVerse persona: {role} of {locale}"
         tw_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote_plus(share_text)}"
         st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)

@@ -213,37 +213,32 @@ def prefer_persian_forms(text: str) -> str:
     out = re.sub(r"\s{2,}", " ", out).strip()
     return out
 
+# ================== Depth helpers ==================
+def _length_for(detail_level: int, base: int, step: int = 120, cap: int = 1400) -> int:
+    """Turns 1–3 into increasing max_tokens."""
+    detail_level = max(1, min(3, int(detail_level)))
+    return min(cap, base + (detail_level - 1) * step)
+
+def _strictness_clause(strictness: float) -> str:
+    """0.0–1.0 → wording that tightens cultural constraints."""
+    strictness = max(0.0, min(1.0, float(strictness)))
+    if strictness >= 0.8:
+        return "Be rigorously historical; avoid legendary exaggerations unless attested in Iranian sources."
+    if strictness >= 0.5:
+        return "Be historically grounded; keep metaphors restrained and accurate to Iranian tradition."
+    return "You may be mildly poetic, but keep references culturally Iranian and plausible."
+
+# ================== JSON preface scrubber ==================
+def _extract_json(text: str) -> str:
+    """If the model prepends text (e.g., 'Here is the JSON output:'), pull just the {...} block."""
+    s = text.find("{"); e = text.rfind("}")
+    return text[s:e+1] if (s != -1 and e != -1 and e > s) else text
+
 # ================== Prompts ==================
 FORBIDDEN_LINE = (
     "Forbidden terms: kshatra/kṣatra, dharma, karma, samsara, moksha, mantra, tantra, sutra, chakra, "
     "Veda/Vedic, atman, brahma/brahman/brahmin, Indra, Shiva, Vishnu, Ganesha, Lakshmi, Purusha, yuga, raja/rajah, Hindu/Hinduism."
 )
-
-def _build_prompt(name: str, region: str, style: str = "Epic") -> str:
-    region = _normalize_region(region)
-    hint = REGION_HINTS.get(region, "")
-    lex = ", ".join(REGION_LEXICON.get(region, []))
-    translit_note = (
-        "Prefer IRANIAN endonyms; if you include a Greek/Latin exonym, show it once in parentheses."
-        if TRANSLIT_MODE == "modern" else
-        "Use Old Persian/Avestan scholarly forms; avoid Greek/Latin exonyms."
-    )
-    return f"""
-You are a cultural historian and storyteller of ancient Iran.
-Write a short persona scroll (4–5 sentences) about {name}, set in the historical region of {region}.
-
-Context for accuracy: {hint}
-Use a few region-appropriate motifs/terms when relevant: {lex}
-
-STRICT RULES:
-- Use ONLY Iranian/Persian terminology (Old Persian, Avestan, Middle Persian/Pahlavi, New Persian).
-- {translit_note}
-- DO NOT use non-Iranian/Indic terms. {FORBIDDEN_LINE}
-- Prefer clear modern English; if you use a Persian term, gloss it once in brackets (e.g., farrah/farr (divine glory), xšaça (royal authority)).
-- Keep the tone {style.lower()} and culturally faithful to Iranian history/myth.
-- Avoid anachronisms and cross-cultural mixing unless explicitly Persianized and accurate.
-- Return ONLY the scroll text (no headings).
-""".strip()
 
 def _build_profile_prompt(
     name: str,
@@ -300,18 +295,63 @@ Return ONLY valid JSON (no extra text, no code fences) with these keys exactly:
   "titles": ["Short epithets or honorifics"],
   "symbols": ["2–4 meaningful symbols"],
   "artifact": "One signature item you carry/use",
-  "short_story": "4–6 sentences: a small moment from your life in that setting; grounded and readable.",
-  "backstory": "5–8 sentences: who you are, how you fit into the realm, and how traits map to your role.",
-  "motto": "A short motto that fits your persona"
+  "appearance": "1–3 sentences on attire, notable features, and period-appropriate materials.",
+  "dwelling": "1–3 sentences describing home/quarters typical for role and region.",
+  "daily_routine": "3–5 bullet-like sentences describing a normal day.",
+  "festival": "1–2 sentences on a seasonal rite or local festival they attend.",
+  "short_story": "4–6 sentences: a small moment from their life, grounded and readable.",
+  "backstory": "5–8 sentences: who they are, how they fit into the realm, and how traits map to their role.",
+  "motto": "A short motto that fits the persona"
 }}
 """.strip()
 
-# ================== Generators (with retry & sanitization) ==================
-def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
+# ================== Generators ==================
+def generate_parsverse_myth(
+    name: str,
+    region: str,
+    style: str = "Epic",
+    detail_level: int = 2,         # 1=short, 2=medium, 3=rich
+    strictness: float = 0.6,       # 0.0–1.0
+    themes: list[str] | None = None
+) -> str:
     if not name or not region:
         raise ValueError("Both name and region are required.")
+    region = _normalize_region(region)
+    hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
+    translit_note = (
+        "Prefer IRANIAN endonyms; if you include a Greek/Latin exonym, show it once in parentheses."
+        if TRANSLIT_MODE == "modern" else
+        "Use Old Persian/Avestan scholarly forms; avoid Greek/Latin exonyms."
+    )
+    themes_line = ", ".join(themes or [])
+    depth_note = _strictness_clause(strictness)
 
-    prompt = _build_prompt(name, region, style)
+    prompt = f"""
+You are a cultural historian and storyteller of ancient Iran.
+Compose a {style.lower()} mythic vignette about {name}, set in {region}. 
+Make it personal and vivid, in 7–10 sentences, and include these labeled parts:
+
+[Setting] 1–2 sentences anchoring time/place with region-appropriate details.
+[Role] 1 sentence stating {name}'s station (tie to Iranian context).
+[Conflict] 2–3 sentences—an ordeal or trial that fits the region.
+[Turning Point] 1–2 sentences—choice, omen, or counsel.
+[Resolution] 1–2 sentences—how it ends, with Iranian symbols/motifs.
+[Moral] 1 line—concise, culturally fitting.
+
+Context for accuracy: {hint}
+Use a few region-appropriate motifs when relevant: {lex}
+Optional themes to weave subtly: {themes_line if themes_line else "—"}
+
+RULES:
+- {translit_note}
+- {depth_note}
+- DO NOT use non-Iranian/Indic terms. {FORBIDDEN_LINE}
+- Prefer clear modern English; gloss Persian terms once in brackets when first used.
+- Return ONLY the prose with the labeled sections in order; no extra commentary.
+""".strip()
+
+    max_tokens = _length_for(detail_level, base=320, step=180, cap=1200)
     max_tries = 3
     last_text = ""
 
@@ -322,15 +362,15 @@ def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.85,
-                max_tokens=320,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
-        else:  # groq
+        else:
             resp = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.85,
-                max_tokens=320,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
 
@@ -340,20 +380,11 @@ def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
             return cleaned
 
         prompt += (
-            "\n\nREVISION INSTRUCTIONS: Your previous draft included forbidden Indic terms. "
-            "Regenerate the scroll using ONLY Iranian terminology; strictly obey the forbidden list."
+            "\n\nREVISION: Your previous draft included forbidden Indic terms. "
+            "Regenerate using ONLY Iranian terminology and keep section labels."
         )
 
-    return last_text  # fallback
-
-def _extract_json(text: str) -> str:
-    """If the model prepends text (e.g., 'Here is the JSON output:'), pull just the {...} block."""
-    s = text.find("{")
-    e = text.rfind("}")
-    if s != -1 and e != -1 and e > s:
-        return text[s:e+1]
-    return text
-
+    return last_text
 
 def generate_parsverse_profile(
     name: str,
@@ -362,12 +393,14 @@ def generate_parsverse_profile(
     gender: str,
     traits: list[str],
     hobby: str,
-    style: str = "Epic"
+    style: str = "Epic",
+    detail_level: int = 2
 ) -> dict:
     if not name or not region:
         raise ValueError("Name and region are required.")
     prompt = _build_profile_prompt(name, region, age, gender, traits, hobby, style)
 
+    max_tokens = _length_for(detail_level, base=900, step=250, cap=1800)
     max_tries = 3
     last_data = None
     last_concat = ""
@@ -379,19 +412,19 @@ def generate_parsverse_profile(
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=950,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
-        else:  # groq
+        else:
             resp = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=950,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
 
-        # strip code fences if present
+        # strip code fences if present and any preface
         raw_clean = raw.strip()
         for fence in ("```json", "```"):
             if raw_clean.startswith(fence):
@@ -400,10 +433,9 @@ def generate_parsverse_profile(
             raw_clean = raw_clean[:-3].strip()
         raw_clean = _extract_json(raw_clean)
 
-        # parse JSON; if fails, wrap as backstory fallback
+        # parse JSON or wrap fallback
         try:
             data = json.loads(raw_clean)
-
         except Exception:
             data = {
                 "kingdom": "",
@@ -415,6 +447,10 @@ def generate_parsverse_profile(
                 "titles": [],
                 "symbols": [],
                 "artifact": "",
+                "appearance": "",
+                "dwelling": "",
+                "daily_routine": "",
+                "festival": "",
                 "short_story": "",
                 "backstory": raw_clean,
                 "motto": ""
@@ -427,8 +463,9 @@ def generate_parsverse_profile(
 
         # clean string fields
         for key in [
-            "kingdom","locale","role","favorite_food","hobby",
-            "friends","artifact","short_story","backstory","motto"
+            "kingdom","locale","role","favorite_food","hobby","friends","artifact",
+            "appearance","dwelling","daily_routine","festival",
+            "short_story","backstory","motto"
         ]:
             if key in data and isinstance(data[key], str):
                 data[key] = clean(data[key])
@@ -444,8 +481,9 @@ def generate_parsverse_profile(
             data.get("kingdom",""), data.get("locale",""), data.get("role",""),
             data.get("favorite_food",""), data.get("hobby",""), data.get("friends",""),
             " ".join(data.get("titles",[])), " ".join(data.get("symbols",[])),
-            data.get("artifact",""), data.get("short_story",""),
-            data.get("backstory",""), data.get("motto","")
+            data.get("artifact",""), data.get("appearance",""), data.get("dwelling",""),
+            data.get("daily_routine",""), data.get("festival",""),
+            data.get("short_story",""), data.get("backstory",""), data.get("motto","")
         ])
 
         if not contains_banned(last_concat):
@@ -477,7 +515,7 @@ if __name__ == "__main__":
 
     print("\n--- Myth Test ---")
     try:
-        print(generate_parsverse_myth("Daniel", "Persis", "Royal"))
+        print(generate_parsverse_myth("Daniel", "Persis", "Royal", detail_level=3, themes=["loyalty","water"]))
     except Exception as e:
         print("Myth error:", e)
 
@@ -490,7 +528,8 @@ if __name__ == "__main__":
             gender="Female",
             traits=["brave", "curious"],
             hobby="archer",
-            style="Mystic"
+            style="Mystic",
+            detail_level=3
         )
         print(json.dumps(profile, indent=2, ensure_ascii=False))
     except Exception as e:
