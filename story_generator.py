@@ -346,6 +346,15 @@ def generate_parsverse_myth(name: str, region: str, style: str = "Epic") -> str:
 
     return last_text  # fallback
 
+def _extract_json(text: str) -> str:
+    """If the model prepends text (e.g., 'Here is the JSON output:'), pull just the {...} block."""
+    s = text.find("{")
+    e = text.rfind("}")
+    if s != -1 and e != -1 and e > s:
+        return text[s:e+1]
+    return text
+
+
 def generate_parsverse_profile(
     name: str,
     region: str,
@@ -389,10 +398,12 @@ def generate_parsverse_profile(
                 raw_clean = raw_clean[len(fence):].strip()
         if raw_clean.endswith("```"):
             raw_clean = raw_clean[:-3].strip()
+        raw_clean = _extract_json(raw_clean)
 
-        # parse JSON or wrap fallback
+        # parse JSON; if fails, wrap as backstory fallback
         try:
             data = json.loads(raw_clean)
+
         except Exception:
             data = {
                 "kingdom": "",

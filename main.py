@@ -66,6 +66,117 @@ a, .sharebar a{ color:var(--turq-deep); text-decoration:none; }
 </style>
 """
 st.markdown(BRAND_CSS, unsafe_allow_html=True)
+PERSIAN_DECOR_CSS = """
+<style>
+.illum-card{
+  --gold:#c2a14d; --turq:#1f8a8a; --turq-deep:#0f6d6d; --paper:#fffaf0; --ink:#102126;
+  background:
+    radial-gradient(ellipse at top left, rgba(194,161,77,.10), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(31,138,138,.08), transparent 60%),
+    repeating-linear-gradient(45deg, rgba(194,161,77,.06) 0 10px, transparent 10px 20px),
+    var(--paper);
+  border: 4px solid var(--gold);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.12);
+  padding: 18px 18px 16px;
+  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.illum-header{
+  display:flex; flex-direction:column; align-items:center; gap:4px; margin-bottom:8px;
+}
+.illum-title{
+  font-weight:800; font-size:24px; color:var(--turq-deep); letter-spacing:.3px; margin:4px 0 0;
+}
+.illum-sub{
+  font-style:italic; color:#23444a; margin:0;
+}
+.illum-divider{
+  height:10px; margin:10px 0 14px;
+  background:
+    conic-gradient(from 0deg, #fff 0 25%, rgba(0,0,0,0) 0 100%) 0 0/16px 10px repeat-x,
+    linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.illum-grid{
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:8px 16px;
+}
+.illum-label{ font-weight:700; color:#2a4e54; }
+.illum-scroll{
+  background: rgba(255,255,255,.65);
+  border: 1px solid rgba(194,161,77,.45);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-family: Georgia, serif;
+  line-height: 1.7;
+}
+.chips{ display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 0; }
+.chip{
+  border:1px solid rgba(194,161,77,.55);
+  padding:3px 8px; border-radius:999px; background:#fff; font-size:12px;
+}
+.illum-ornament{
+  position:absolute; inset:auto -40px -40px auto; width:160px; height:160px;
+  background: radial-gradient(circle at 30% 30%, rgba(194,161,77,.25), rgba(194,161,77,0) 60%),
+              radial-gradient(circle at 70% 70%, rgba(31,138,138,.18), rgba(31,138,138,0) 60%);
+  filter: blur(1px);
+  pointer-events:none;
+}
+</style>
+"""
+st.markdown(PERSIAN_DECOR_CSS, unsafe_allow_html=True)
+
+def format_persona_persian(data: dict, *, name: str | None = None) -> str:
+    titles = ", ".join(data.get("titles", [])) or ""
+    symbols = data.get("symbols", [])
+    role = data.get("role","")
+    locale = data.get("locale","")
+    kingdom = data.get("kingdom","")
+    motto = data.get("motto","")
+
+    header_line = f"{role} of {locale}" if role or locale else kingdom
+    display_name = name or titles or ""
+    subtitle = motto
+
+    chips_html = "".join([f"<span class='chip'>{s}</span>" for s in symbols])
+
+    return f"""
+<div class="illum-card">
+  <div class="illum-ornament"></div>
+  <div class="illum-header">
+    <div class="illum-title">{header_line}</div>
+    {'<p class="illum-sub">'+subtitle+'</p>' if subtitle else ''}
+    {'<p class="illum-sub">'+display_name+'</p>' if display_name else ''}
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div class="illum-grid">
+    <div><span class="illum-label">Kingdom:</span><br>{kingdom}</div>
+    <div><span class="illum-label">Locale:</span><br>{locale}</div>
+    <div><span class="illum-label">Role:</span><br>{role}</div>
+    <div><span class="illum-label">Favorite food:</span><br>{data.get('favorite_food','')}</div>
+    <div><span class="illum-label">Hobby:</span><br>{data.get('hobby','')}</div>
+    <div><span class="illum-label">Friends:</span><br>{data.get('friends','')}</div>
+    <div><span class="illum-label">Artifact:</span><br>{data.get('artifact','')}</div>
+    <div><span class="illum-label">Symbols:</span><br><div class="chips">{chips_html}</div></div>
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Short story</div>
+    <div class="illum-scroll">{data.get('short_story','')}</div>
+  </div>
+
+  <div style="height:12px;"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Backstory</div>
+    <div class="illum-scroll">{data.get('backstory','')}</div>
+  </div>
+</div>
+""".strip()
 
 # ------------------ Tiny global counter (file-based) ------------------
 COUNTER_FILE = os.path.join(os.path.dirname(__file__), "counter.json")
@@ -286,61 +397,8 @@ if d_submit:
             )
 
         st.success("Your persona is ready!")
-        st.markdown('<div class="pars-card"><h3 style="text-align:center;margin-top:0;">👑 Persona Dossier</h3></div>', unsafe_allow_html=True)
-
-        role = profile.get("role", "") or "Citizen"
-        locale = profile.get("locale", "") or d_region
-        titles = profile.get("titles", []) or []
-        st.markdown(
-            f"<h4 style='text-align:center;margin:8px 0 2px 0;'>{role} of {locale}</h4>"
-            f"<p style='text-align:center;margin-top:0;'><em>{', '.join(titles)}</em></p>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown(f"<div class='pars-scroll'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{profile.get('backstory','')}</p></div>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"**Kingdom:**<br>{profile.get('kingdom','')}", unsafe_allow_html=True)
-            st.markdown(f"**Locale:**<br>{profile.get('locale','')}", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"**Role:**<br>{profile.get('role','')}", unsafe_allow_html=True)
-            st.markdown(f"**Symbols:**<br>{', '.join(profile.get('symbols', []))}", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
-            st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
-
-        if st.button("🔄 Try another persona", key="persona_variant"):
-            tip = random.choice(FACTS)
-            with st.spinner(f"Reimagining your station… (Did you know? {tip})"):
-                profile2 = generate_parsverse_profile(
-                    name=d_name, region=d_region, age=int(d_age),
-                    gender=d_gender, traits=d_traits,
-                    hobby=d_hobby or "general civic duties",
-                    style=d_style
-                )
-            st.markdown("#### Alternate persona")
-            st.markdown(
-                f"<div style='background:#fdf6e3;padding:18px;border:1px solid #d8caa1;border-radius:10px;"
-                f"font-family:Georgia,serif;'><p style='font-size:17px;line-height:1.7;white-space:pre-wrap;'>{profile2.get('backstory','')}</p></div>",
-                unsafe_allow_html=True
-            )
-
-        # Quick facts (add under the existing columns)
-        st.markdown("---")
-        st.markdown(f"**Favorite food:** {profile.get('favorite_food','')}")
-        st.markdown(f"**Hobby:** {profile.get('hobby','')}")
-        st.markdown(f"**Friends:** {profile.get('friends','')}")
-
-        # Short story block (more readable)
-        st.markdown("### Short story")
-        st.markdown(
-            f"<div class='pars-scroll'><p style='font-size:17px;line-height:1.7;white-space:pre-wrap;'>{profile.get('short_story','')}</p></div>",
-            unsafe_allow_html=True
-        )
-
-
+        st.markdown(format_persona_persian(profile, name=d_name), unsafe_allow_html=True)
+        
         # Downloads
         persona_json_str = json.dumps(profile, ensure_ascii=False, indent=2)
         st.markdown("---")
@@ -374,6 +432,9 @@ Backstory:
             )
 
         # Share
+        role = profile.get("role", "") or "Citizen"
+        locale = profile.get("locale", "") or d_region
+
         share_text = f"My ParsVerse persona: {role} of {locale} — {APP_URL}" if APP_URL else f"My ParsVerse persona: {role} of {locale}"
         tw_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote_plus(share_text)}"
         st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
