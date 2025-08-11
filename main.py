@@ -1,5 +1,4 @@
 # main.py
-from story_generator import FACTS  
 import os
 import csv
 import json
