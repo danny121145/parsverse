@@ -1,4 +1,5 @@
 # main.py
+from story_generator import FACTS  
 import os
 import csv
 import json
@@ -139,13 +140,16 @@ def log_event(kind, payload: dict):
 # ------------------ Did you know facts ------------------
 FACTS = [
     "“Farr / Farrah (xvarənah)” denotes divine royal glory in Iranian tradition.",
-    "Takht-e Jamshid (Parsa/Persepolis) bears Old Persian, Elamite, and Babylonian inscriptions.",
-    "Kourosh (Cyrus) founded Pasargad (Pasargadae), the early Achaemenid capital.",
-    "Hagmatāna (Hamadan/Ecbatana) is tied to Median royal heritage.",
-    "Tisfun (Ctesiphon) served as a late antique imperial capital on the Tigris.",
+    "Takht-e Jamshid (Parsa/Persepolis) bears inscriptions in Old Persian, Elamite, and Babylonian.",
+    "Kourosh (Cyrus) founded Pasargad, the early Achaemenid capital.",
+    "Hagmatāna (Hamadan/Ecbatana) was a Median royal center with layered fortifications.",
+    "Tisfun (Ctesiphon) served as a grand Sasanian capital on the Tigris.",
     "The Shahnameh preserves epic cycles like Rostam of Sistan/Zabulistan.",
-    "Sogdian merchants linked Iran to Silk Roads via Samarkand and Bukhara.",
+    "Sogdian merchants connected Iran to the Silk Roads via Samarkand and Bukhara.",
+    "Hyrcanian forests along the Caspian are among the world’s oldest temperate rainforests.",
+    "Parthian cataphracts were famed for heavy armor on both rider and horse.",
 ]
+
 
 # ------------------ Header with inline SVG mark ------------------
 SVG_LOGO = """
@@ -201,6 +205,16 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             st.success("Your scroll is ready!")
             st.markdown('<div class="pars-card"><h3 style="text-align:center;margin-top:0;">🪶 ParsVerse Scroll</h3></div>', unsafe_allow_html=True)
             st.markdown(f"<div class='pars-scroll'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{myth}</p></div>", unsafe_allow_html=True)
+
+            if st.button("🔄 Try another wording", key="myth_variant"):
+                tip = random.choice(FACTS)
+                with st.spinner(f"Refining the scroll… (Did you know? {tip})"):
+                    myth2 = generate_parsverse_myth(q_name, q_region, q_style)
+                st.markdown(
+                    f"<div style='background:#fdf6e3;padding:18px;border:1px solid #d8caa1;border-radius:10px;"
+                    f"font-family:Georgia,serif;'><p style='font-size:18px;line-height:1.7;white-space:pre-wrap;'>{myth2}</p></div>",
+                    unsafe_allow_html=True
+                )
 
             # Download myth as .txt
             st.download_button(
@@ -297,6 +311,22 @@ if d_submit:
         with c3:
             st.markdown(f"**Artifact:**<br>{profile.get('artifact','')}", unsafe_allow_html=True)
             st.markdown(f"**Motto:**<br><em>{profile.get('motto','')}</em>", unsafe_allow_html=True)
+
+        if st.button("🔄 Try another persona", key="persona_variant"):
+            tip = random.choice(FACTS)
+            with st.spinner(f"Reimagining your station… (Did you know? {tip})"):
+                profile2 = generate_parsverse_profile(
+                    name=d_name, region=d_region, age=int(d_age),
+                    gender=d_gender, traits=d_traits,
+                    hobby=d_hobby or "general civic duties",
+                    style=d_style
+                )
+            st.markdown("#### Alternate persona")
+            st.markdown(
+                f"<div style='background:#fdf6e3;padding:18px;border:1px solid #d8caa1;border-radius:10px;"
+                f"font-family:Georgia,serif;'><p style='font-size:17px;line-height:1.7;white-space:pre-wrap;'>{profile2.get('backstory','')}</p></div>",
+                unsafe_allow_html=True
+            )
 
         # Quick facts (add under the existing columns)
         st.markdown("---")
