@@ -386,6 +386,91 @@ RULES:
 
     return last_text
 
+def generate_parsverse_story(
+    name: str,
+    region: str,
+    style: str = "Epic",
+    detail_level: int = 3,        # 1–3 (defaults richer than myth)
+    strictness: float = 0.7,      # 0.0–1.0 (slightly stricter than myth)
+    themes: list[str] | None = None
+) -> str:
+    """
+    Long-form "Epic Chronicle" with labeled beats, small cast, a line of dialogue,
+    culturally faithful imagery, and a concise closing line.
+    """
+    if not name or not region:
+        raise ValueError("Both name and region are required.")
+    region = _normalize_region(region)
+    hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
+    translit_note = (
+        "Prefer IRANIAN endonyms; if you include a Greek/Latin exonym, show it once in parentheses."
+        if TRANSLIT_MODE == "modern" else
+        "Use Old Persian/Avestan scholarly forms; avoid Greek/Latin exonyms."
+    )
+    themes_line = ", ".join(themes or [])
+    depth_note = _strictness_clause(strictness)
+
+    prompt = f"""
+You are a cultural historian and storyteller of ancient Iran.
+Write a {style.lower()} **Epic Chronicle** about {name}, set in {region}.
+Return 12–18 sentences across the labeled sections **exactly** as below:
+
+[Cast] 2–4 short items naming key figures and their role/kinship (e.g., "Roxana — caravan scribe").
+[Setting] 2–3 sentences grounding time/place with region details.
+[Inciting Event] 2–3 sentences that set the story in motion.
+[Rising Action] 3–4 sentences with obstacles and travel/ritual/work relevant to {region}.
+[Climax] 2–3 sentences at the decisive moment; include **one** short line of dialogue in quotes.
+[Aftermath] 2–3 sentences with consequences for the household/community.
+[Closing Line] 1 sentence that lands as a proverb-like reflection.
+
+Context for accuracy: {hint}
+Use a few region-appropriate motifs when relevant: {lex}
+Optional themes to weave subtly: {themes_line if themes_line else "—"}
+
+RULES:
+- {translit_note}
+- {depth_note}
+- DO NOT use non-Iranian/Indic terms. {FORBIDDEN_LINE}
+- Prefer clear modern English; gloss Persian terms once in brackets when first used.
+- Keep section labels **as shown** and in that order. No extra commentary.
+""".strip()
+
+    max_tokens = _length_for(detail_level, base=700, step=300, cap=1800)
+    max_tries = 3
+    last_text = ""
+
+    for _ in range(max_tries):
+        provider, client = _get_client()
+        if provider == "openai":
+            resp = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.88,
+                max_tokens=max_tokens,
+            )
+            raw = resp.choices[0].message.content.strip()
+        else:
+            resp = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.88,
+                max_tokens=max_tokens,
+            )
+            raw = resp.choices[0].message.content.strip()
+
+        cleaned = prefer_persian_forms(sanitize_non_iranian(raw))
+        last_text = cleaned
+        if not contains_banned(cleaned):
+            return cleaned
+
+        prompt += (
+            "\n\nREVISION: Your previous draft included forbidden Indic terms. "
+            "Regenerate using ONLY Iranian terminology and keep the labeled sections."
+        )
+
+    return last_text
+
 def generate_parsverse_profile(
     name: str,
     region: str,

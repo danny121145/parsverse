@@ -8,6 +8,7 @@ import streamlit as st
 from story_generator import (
     generate_parsverse_myth,
     generate_parsverse_profile,
+    generate_parsverse_story,
     REGIONS,
 )
 
@@ -231,6 +232,34 @@ def format_myth_persian(myth_text: str, *, name: str = "", region: str = "", sty
 </div>
 """.strip()
 
+def format_story_persian(story_text: str, *, name: str = "", region: str = "", style: str = "") -> str:
+    header_line = f"Chronicle of {name}" if name else "Epic Chronicle"
+    chips_html = "".join([f"<span class='chip'>{c}</span>" for c in [region, style, "Long form"] if c])
+    return f"""
+<div class="illum-card">
+  <div class="illum-ornament"></div>
+  <div class="illum-header">
+    <div class="illum-title">{header_line}</div>
+    {'<p class="illum-sub">'+region+'</p>' if region else ''}
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div class="illum-grid">
+    <div><span class="illum-label">Region:</span><br>{region or '-'}</div>
+    <div><span class="illum-label">Tone:</span><br>{style or '-'}</div>
+    <div><span class="illum-label">Badges:</span><br><div class="chips">{chips_html}</div></div>
+  </div>
+
+  <div class="illum-divider"></div>
+
+  <div>
+    <div class="illum-label" style="margin-bottom:4px;">Story</div>
+    <div class="illum-scroll" id="story-text">{story_text}</div>
+  </div>
+</div>
+""".strip()
+
 # ------------------ Tiny global counter (file-based) ------------------
 COUNTER_FILE = os.path.join(os.path.dirname(__file__), "counter.json")
 def _load_counts():
@@ -356,18 +385,76 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
         q_detail = st.slider("Detail level", 1, 3, 2, help="1=short, 2=medium, 3=rich")
         q_strict = st.slider("Historical strictness", 0.0, 1.0, 0.6, 0.1, help="Higher = more historically grounded, less mythic fluff")
         q_themes = st.text_input("Themes (comma separated, optional)", help="e.g., loyalty, water, journey")
+        q_long = st.checkbox("Epic Chronicle (long story)")
 
         st.caption(f"Remaining this session: {remaining('myth')} myth generations")
         q_submit = st.form_submit_button("Generate Myth")
+if q_submit:
+    if not q_name or not q_region:
+        st.warning("Please enter a name and choose a region.")
+    elif not can_make("myth"):
+        st.error("You’ve reached the session limit for myths. Please come back later!")
+    else:
+        tip = random.choice(FACTS)
+        themes_list = [t.strip() for t in (q_themes or "").split(",") if t.strip()]
 
-    if q_submit:
-        if not q_name or not q_region:
-            st.warning("Please enter a name and choose a region.")
-        elif not can_make("myth"):
-            st.error("You’ve reached the session limit for myths. Please come back later!")
+        if q_long:
+            # --- LONG STORY MODE ---
+            with st.spinner(f"Composing your epic chronicle… (Did you know? {tip})"):
+                story = generate_parsverse_story(
+                    q_name, q_region, q_style,
+                    detail_level=max(2, q_detail),  # encourage richer output
+                    strictness=max(q_strict, 0.6),  # slightly stricter baseline
+                    themes=themes_list
+                )
+            st.success("Your chronicle is ready!")
+            st.markdown(
+                format_story_persian(story, name=q_name, region=q_region, style=q_style),
+                unsafe_allow_html=True
+            )
+
+            # Try variant
+            if st.button("🔄 Try another variant", key="story_variant"):
+                tip = random.choice(FACTS)
+                with st.spinner(f"Reweaving the chronicle… (Did you know? {tip})"):
+                    story2 = generate_parsverse_story(
+                        q_name, q_region, q_style,
+                        detail_level=max(2, q_detail),
+                        strictness=max(q_strict, 0.6),
+                        themes=themes_list
+                    )
+                st.markdown(
+                    format_story_persian(story2, name=q_name, region=q_region, style=q_style),
+                    unsafe_allow_html=True
+                )
+
+            # Download + Copy + Share
+            st.download_button(
+                label="⬇️ Download Chronicle (.txt)",
+                data=story.encode("utf-8"),
+                file_name=f"parsverse_chronicle_{q_name or 'anon'}.txt",
+                mime="text/plain"
+            )
+            st.markdown("""
+            <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('story-text').innerText)">
+                Copy story to clipboard
+            </button>
+            """, unsafe_allow_html=True)
+
+            quoted = urllib.parse.quote_plus(f"My ParsVerse epic chronicle ✨ — {APP_URL}" if APP_URL else "My ParsVerse epic chronicle ✨")
+            tw_url = f"https://twitter.com/intent/tweet?text={quoted}"
+            st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
+
+            # Log as a "myth" usage for now (or add a separate 'stories' counter later)
+            st.session_state.history["myths"].append({
+                "name": q_name, "region": q_region, "style": q_style, "text": story
+            })
+            note_usage("myth")
+            bump_counter("myth")
+            log_event("myth", {"name": q_name, "region": q_region, "style": f"{q_style} (chronicle)"})
+
         else:
-            tip = random.choice(FACTS)
-            themes_list = [t.strip() for t in (q_themes or "").split(",") if t.strip()]
+            # --- ORIGINAL MYTH MODE ---
             with st.spinner(f"Weaving your legend… (Did you know? {tip})"):
                 myth = generate_parsverse_myth(
                     q_name, q_region, q_style,
@@ -380,7 +467,6 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
                 unsafe_allow_html=True
             )
 
-            # Try another wording (uses the same knobs)
             if st.button("🔄 Try another wording", key="myth_variant"):
                 tip = random.choice(FACTS)
                 with st.spinner(f"Refining the scroll… (Did you know? {tip})"):
@@ -393,27 +479,22 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
                     unsafe_allow_html=True
                 )
 
-            # Download myth as .txt
             st.download_button(
                 label="⬇️ Download Myth (.txt)",
                 data=myth.encode("utf-8"),
                 file_name=f"parsverse_myth_{q_name or 'anon'}.txt",
                 mime="text/plain"
             )
-
-            # Copy button for illuminated myth card
             st.markdown("""
             <button class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('myth-text').innerText)">
                 Copy myth to clipboard
             </button>
             """, unsafe_allow_html=True)
 
-            # Share to X (Twitter)
             quoted = urllib.parse.quote_plus(f"My ParsVerse myth ✨ — {APP_URL}" if APP_URL else "My ParsVerse myth ✨")
             tw_url = f"https://twitter.com/intent/tweet?text={quoted}"
             st.markdown(f"<div class='sharebar' style='margin-top:8px;'><a href='{tw_url}' target='_blank'>🐦 Share on X</a></div>", unsafe_allow_html=True)
 
-            # History + counters + quota
             st.session_state.history["myths"].append({
                 "name": q_name, "region": q_region, "style": q_style, "text": myth
             })
@@ -421,7 +502,8 @@ with st.expander("✨ Quick Myth (simple scroll)", expanded=True):
             bump_counter("myth")
             log_event("myth", {"name": q_name, "region": q_region, "style": q_style})
 
-            st.button("🔁 Generate another myth", key="regen_myth")
+    st.button("🔁 Generate another myth/chronicle", key="regen_myth_or_story")
+
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
