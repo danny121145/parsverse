@@ -25,6 +25,16 @@ image_provider_info = sg.image_provider_info
 APP_URL = os.getenv("APP_URL", "").strip()
 st.set_page_config(page_title="ParsVerse – Myth & Persona", page_icon="🏛️", layout="centered")
 
+# ---- Session state guards ----
+if "counts" not in st.session_state:
+    st.session_state.counts = {"total": 0, "myths": 0, "personas": 0, "images": 0}
+
+if "quota" not in st.session_state:
+    st.session_state.quota = {"myth": 0, "persona": 0, "image": 0}
+
+if "history" not in st.session_state:
+    st.session_state.history = {"myths": [], "personas": []}
+
 # ------------------ Brand + Responsive CSS ------------------
 BRAND_CSS = """
 <style>
