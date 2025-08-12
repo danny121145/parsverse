@@ -587,6 +587,9 @@ def generate_parsverse_profile(
         if raw_clean.endswith("```"):
             raw_clean = raw_clean[:-3].strip()
 
+        # ---- Extract just the JSON object if the model added a preface ----
+        raw_clean = _extract_json(raw_clean)
+
         # ---- Parse JSON (fallback: treat as backstory) ----
         try:
             data = json.loads(raw_clean)

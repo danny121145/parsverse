@@ -130,6 +130,8 @@ def format_persona_persian(data: dict, *, name: str | None = None) -> str:
     motto = data.get("motto","")
 
     header_line = f"{role} of {locale}" if role or locale else kingdom
+    subtitle_html = f'<p class="illum-sub">{subtitle}</p>' if subtitle else ''
+    name_html = f'<p class="illum-sub">{display_name}</p>' if display_name else ''
     display_name = name or titles or ""
     subtitle = motto
     chips_html = "".join([f"<span class='chip'>{s}</span>" for s in symbols])
@@ -139,8 +141,7 @@ def format_persona_persian(data: dict, *, name: str | None = None) -> str:
   <div class="illum-ornament"></div>
   <div class="illum-header">
     <div class="illum-title">{header_line}</div>
-    {'<p class="illum-sub">'+subtitle+'</p>' if subtitle else ''}
-    {'<p class="illum-sub">'+display_name+'</p>' if display_name else ''}
+    {subtitle_html}{name_html}
   </div>
 
   <div class="illum-divider"></div>
