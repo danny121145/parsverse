@@ -338,6 +338,24 @@ st.sidebar.write(f"**Personas left:** {remaining('persona')} / {PERSONA_LIMIT}")
 st.sidebar.write(f"**Images left:** {remaining('image')} / {IMAGE_LIMIT}")
 st.sidebar.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
+prov = image_provider_info()
+color_map = {
+    "huggingface": "#10b981",  # green
+    "openai": "#3b82f6",       # blue
+    "xai": "#a855f7",          # purple
+}
+dot = color_map.get(prov["provider"], "#9ca3af")
+st.sidebar.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:2px 0 6px 0;">
+  <span style="width:10px;height:10px;border-radius:50%;background:{dot};display:inline-block;"></span>
+  <strong>Image backend</strong>
+</div>
+<div style="font-size:13.5px; color:#334155;">
+  Provider: <b>{prov['provider'].title()}</b><br/>
+  Model: <code style="font-size:12px;">{prov['model']}</code>
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown(f"""
 <div class="brand-wrap">
   {SVG_LOGO}
