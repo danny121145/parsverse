@@ -839,8 +839,8 @@ def generate_image_png_bytes(prompt: str, size: str = "1024x1024", negative_prom
             "options": {"wait_for_model": True},
             "parameters": {
                 "negative_prompt": negative_text,
-                "num_inference_steps": 35,
-                "guidance_scale": 8.0,
+                "num_inference_steps": 45,
+                "guidance_scale": 10.0,
                 # "width": 1024, "height": 1024,  # some hosted pipelines ignore these
             },
         }
