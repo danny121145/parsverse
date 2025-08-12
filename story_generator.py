@@ -543,7 +543,9 @@ def generate_parsverse_profile(
     gender: str,
     traits: list[str],
     hobby: str,
-    style: str = "Epic"
+    style: str = "Epic",
+    detail_level: int = 2,
+    strictness: float = 0.6
 ) -> dict:
     if not name or not region:
         raise ValueError("Name and region are required.")
@@ -554,6 +556,9 @@ def generate_parsverse_profile(
     last_data: dict | None = None
     last_concat = ""
 
+    # Size the response by requested detail level
+    max_tokens = _length_for(detail_level, base=950, step=120, cap=1400)
+
     for _ in range(max_tries):
         # ---- Call LLM via lazy client ----
         provider, client = _get_client()
@@ -562,7 +567,7 @@ def generate_parsverse_profile(
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=1100,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
         else:
@@ -570,7 +575,7 @@ def generate_parsverse_profile(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=1100,
+                max_tokens=max_tokens,
             )
             raw = resp.choices[0].message.content.strip()
 
