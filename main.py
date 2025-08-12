@@ -605,10 +605,12 @@ with colB:
             with st.spinner("Painting your scene…"):
                 lr = st.session_state.last_result
                 if lr["kind"] in ("myth", "story"):
-                    prompt_img = build_image_prompt_from_myth(lr["text"], lr.get("region",""))
+                    prompt_img, neg_img = sg.build_image_prompts_from_myth(
+                        lr["text"], lr.get("region",""), lr.get("style","")
+                    )
                 else:  # persona
-                    prompt_img = build_image_prompt_from_profile(lr["profile"])
-                img_bytes = generate_image_png_bytes(prompt_img)
+                    prompt_img, neg_img = sg.build_image_prompts_from_profile(lr["profile"])
+                img_bytes = sg.generate_image_png_bytes(prompt_img, negative_prompt=neg_img)
 
             if img_bytes:
                 st.image(img_bytes, caption="ParsVerse Illustration", use_container_width=True)

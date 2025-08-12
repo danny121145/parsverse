@@ -287,6 +287,105 @@ def _strictness_clause(strictness: float) -> str:
         return "Be historically grounded; keep metaphors restrained and accurate to Iranian tradition."
     return "You may be mildly poetic, but keep references culturally Iranian and plausible."
 
+# --- NEW: helpers to coerce age into descriptive text/negatives ---
+def _age_band(age: int) -> tuple[str, list[str]]:
+    try:
+        a = int(age)
+    except Exception:
+        return "adult", []
+    if a <= 14:
+        return "child", ["teen", "adult", "elderly", "wrinkles", "grey hair"]
+    if a <= 19:
+        return "late-teen", ["child", "elderly", "wrinkles", "grey hair"]
+    if a <= 25:
+        return "young adult", ["elderly", "wrinkles", "grey hair"]
+    if a <= 44:
+        return "adult", []
+    if a <= 59:
+        return "middle-aged adult", ["child", "teen", "baby-face"]
+    return "elder", ["child", "teen", "baby-face", "youthful"]
+
+# --- NEW: richer builder for myths that returns (prompt, negative) ---
+def build_image_prompts_from_myth(myth_text: str, region: str, style: str | None = None) -> tuple[str, str]:
+    region = _normalize_region(region)
+    hint = REGION_HINTS.get(region, "")
+    chosen_style = (style or "Epic").lower()
+
+    positive = (
+        "Illustrated scene in the manner of Persian miniatures (Safavid/Qajar influences), "
+        "painterly, parchment background with turquoise and gold accents, intricate patterns, "
+        "historically grounded Iranian clothing, weapons, and architecture. "
+        "Three-quarter composition, clear subject, no text.\n\n"
+        f"Region context: {hint}\n"
+        f"Tone: {chosen_style}\n\n"
+        "Story excerpt to depict (choose the most cinematic moment, do not add new characters):\n"
+        f"{myth_text[:1400]}"
+    )
+    negative = (
+        "text, watermark, signature, modern clothing, guns, anime, 3d render, photo, "
+        "low quality, blurry, extra limbs, deformed hands, duplicated face, jpeg artifacts"
+    )
+    return positive, negative
+
+# --- NEW: richer builder for persona portraits that returns (prompt, negative) ---
+def build_image_prompts_from_profile(profile: dict) -> tuple[str, str]:
+    kingdom = profile.get("kingdom", "")
+    locale = profile.get("locale", "")
+    role = profile.get("role", "")
+    gender = (profile.get("gender", "") or "").strip().lower()
+    age = profile.get("age", 0)
+    age_text, age_neg = _age_band(age if isinstance(age, int) else 0)
+
+    # try to locate a region hint by scanning locale/kingdom
+    hint = ""
+    region_key = ""
+    for r, h in REGION_HINTS.items():
+        if r in (locale or "") or r in (kingdom or ""):
+            hint = h
+            region_key = r
+            break
+
+    symbols = ", ".join(profile.get("symbols", [])[:3])
+    artifact = profile.get("artifact", "")
+    appearance = (profile.get("appearance", "") or "")[:300]
+
+    # gender constraints
+    gender_pos = ""
+    gender_neg = []
+    if gender.startswith("f"):
+        gender_pos = "female"
+        gender_neg = ["male", "man", "masculine", "beard", "moustache", "stubble", "broad jawline"]
+    elif gender.startswith("m"):
+        gender_pos = "male"
+        gender_neg = ["female", "woman"]
+    else:
+        gender_pos = "person"
+        gender_neg = []  # stay neutral
+
+    positive = (
+        "Bust/half-length portrait in the manner of Persian miniatures (Safavid/Qajar influences), "
+        "painterly, parchment background with turquoise and gold accents, intricate border motifs. "
+        "Historically grounded attire and props. No text in the image.\n\n"
+        f"Subject: {gender_pos}, {age_text}, a {role} from {kingdom} in {locale}. "
+        f"Include one signature prop if tasteful: {artifact if artifact else '—'}. "
+        f"Subtle symbolic motifs: {symbols if symbols else '—'}. "
+        f"Appearance notes to reflect: {appearance if appearance else '—'}\n"
+        f"Region context: {hint}\n"
+        "Framing: three-quarter view, calm expression, soft lighting."
+    )
+
+    negative_list = [
+        "text", "watermark", "signature", "modern clothing", "guns", "anime", "3d render", "photo",
+        "low quality", "blurry", "extra limbs", "deformed hands", "jpeg artifacts"
+    ]
+    negative_list += gender_neg
+    negative_list += age_neg
+    # if the age is young, avoid 'wrinkles/elderly'; if elder, avoid 'teen/child' etc (handled above)
+
+    negative = ", ".join(dict.fromkeys(negative_list))  # dedupe
+    return positive, negative
+
+
 def image_provider_info() -> dict:
     """
     Returns {'provider': 'huggingface'|'openai'|'xai', 'model': '<model_id>'}
@@ -692,127 +791,71 @@ def generate_parsverse_profile(
         "short_story": ""
     }
 
-# ================== Image prompt builders & generator ==================
-def build_image_prompt_from_myth(myth_text: str, region: str, style: str | None = None) -> str:
-    """Richer, art-directed prompt for a single myth scene."""
-    region = _normalize_region(region)
-    hint = REGION_HINTS.get(region, "")
-    lex = ", ".join(REGION_LEXICON.get(region, []))
-    style_line = f"Tone: {style}." if style else ""
-    return (
-        "Create a single, square illustration inspired by ancient Iranian art traditions (Achaemenid reliefs, Sasanian rock reliefs, "
-        "painted manuscripts). Render in a painterly, museum-poster aesthetic: warm parchment base with turquoise and gold accents; "
-        "no modern elements, no text, no watermark.\n"
-        f"{style_line}\n"
-        "Scene: depict ONE decisive moment from the story excerpt below. Focus on clear silhouette, layered depth, and period-correct "
-        "clothing/architecture/gear. Suggested motifs to borrow subtly: cypress, winged sun disk, bull protomes, apadana columns, "
-        "glazed brick patterns. Camera: three-quarter view, mid-distance. Lighting: dawn or oil-lamp warmth.\n\n"
-        f"Region context & motifs: {hint}  •  Lexicon cues: {lex}\n\n"
-        f"Story excerpt (guide the content, not exact layout):\n{myth_text[:1400]}"
-    )
+def build_image_prompt_from_myth(myth_text: str, region: str) -> str:
+    p, _n = build_image_prompts_from_myth(myth_text, region, None)
+    return p
 
 def build_image_prompt_from_profile(profile: dict) -> str:
-    """Richer portrait prompt that leverages persona fields."""
-    # Region hint
-    region_text = profile.get("locale", "") or profile.get("kingdom", "")
-    hint = ""
-    for r, h in REGION_HINTS.items():
-        if r in region_text:
-            hint = h
-            break
+    p, _n = build_image_prompts_from_profile(profile)
+    return p
 
-    role = profile.get("role","")
-    kingdom = profile.get("kingdom","")
-    locale = profile.get("locale","")
-    titles = ", ".join(profile.get("titles", [])[:3])
-    symbols = ", ".join(profile.get("symbols", [])[:4])
-    artifact = profile.get("artifact","")
-    appearance = profile.get("appearance","")
-    dwelling = profile.get("dwelling","")
-
-    return (
-        "Create a portrait-style illustration inspired by ancient Iranian visual language (Achaemenid/Sasanian reliefs and illuminated manuscripts). "
-        "Subject: a single person, half-length or three-quarter, facing slightly off-camera. Warm parchment background with subtle turquoise & gold tracery; "
-        "no text, no watermark, no modern elements.\n"
-        f"Realm/Region: {kingdom} — {locale}  •  Context: {hint}\n"
-        f"Role: {role}  •  Titles (optional to hint): {titles}\n"
-        f"Symbols to echo subtly (jewelry, embroidery, backdrop): {symbols}\n"
-        f"Signature artifact to include tastefully: {artifact}\n"
-        f"Appearance notes (clothing/materials/physiognomy): {appearance}\n"
-        f"Background flavor (architecture/landscape cue): {dwelling}\n"
-        "Composition: dignified, calm expression; crisp silhouette; soft rim light; shallow depth of field.\n"
-        "Style: painterly, layered textures, slight paper grain; avoid photoreal skin; emphasize historical fabrics & metalwork."
-    )
-
-def generate_image_png_bytes(prompt: str, size: str = "1024x1024") -> bytes | None:
-    """
-    Returns PNG bytes or None. Chooses provider by IMG_PROVIDER env:
-      - openai: gpt-image-1
-      - xai: grok-2-image (OpenAI-compatible client)
-      - huggingface: SDXL via Inference API
-    """
+# --- UPDATED: accept negative_prompt + stronger HF parameters ---
+def generate_image_png_bytes(prompt: str, size: str = "1024x1024", negative_prompt: str | None = None) -> bytes | None:
     provider, client = _get_image_client()
     if provider is None or client is None:
         return None
 
-    # Basic safety: nudge styles; remove text-in-image
     prompt_safe = (
-        "Ancient Iranian-inspired illustration, respectful and historically grounded. "
-        "No text in image. No real people. " + prompt
+        "Respectful, historically grounded Iranian-inspired illustration. "
+        "No text in image. " + prompt
     )
+    negative_text = negative_prompt or ""
 
     if provider == "openai":
+        # No native negative prompt; fold into prompt explicitly.
+        full_prompt = prompt_safe + (f"\nAvoid: {negative_text}" if negative_text else "")
         resp = client.images.generate(
             model=OPENAI_IMAGE_MODEL,
-            prompt=prompt_safe,
-            size=size,                     # e.g., "1024x1024"
+            prompt=full_prompt,
+            size=size,
             response_format="b64_json",
         )
         b64 = resp.data[0].b64_json
         return base64.b64decode(b64) if b64 else None
 
     if provider == "xai":
-        # size may be ignored by backend; API is OpenAI-compatible
+        full_prompt = prompt_safe + (f"\nAvoid: {negative_text}" if negative_text else "")
         resp = client.images.generate(
             model=XAI_IMAGE_MODEL,
-            prompt=prompt_safe,
+            prompt=full_prompt,
             response_format="b64_json",
         )
         b64 = resp.data[0].b64_json
         return base64.b64decode(b64) if b64 else None
 
     if provider == "huggingface":
-        # Hugging Face Inference API – returns raw PNG bytes if Accept: image/png
-        # You can pass generation params in JSON body. Wait for model so first call doesn’t 503.
-        import requests, json as _json
         payload = {
             "inputs": prompt_safe,
             "options": {"wait_for_model": True},
-            # Optional SDXL params:
-            # "parameters": {
-            #     "negative_prompt": "blurry, text, watermark, signature, low quality",
-            #     "num_inference_steps": 30,
-            #     "guidance_scale": 7.0,
-            #     # "width": 1024, "height": 1024,   # many hosted pipelines ignore w/h
-            # }
+            "parameters": {
+                "negative_prompt": negative_text,
+                "num_inference_steps": 35,
+                "guidance_scale": 8.0,
+                # "width": 1024, "height": 1024,  # some hosted pipelines ignore these
+            },
         }
         try:
-            r: requests.Response = client.post(HF_API_URL, json=payload, timeout=60)
+            r = client.post(HF_API_URL, json=payload, timeout=90)
             ct = r.headers.get("Content-Type", "")
             if r.status_code == 200 and "image/" in ct:
                 return r.content
-            # If the model is still loading or an error occurred, HF returns JSON
-            try:
-                err = r.json()
-                # Common messages: {"error": "...", "estimated_time": ...}
-                # You can surface a friendlier message in the UI if you want.
-                return None
-            except Exception:
-                return None
+            # Try to surface HF error JSON in logs if you want; we just fail silently here:
+            return None
         except Exception:
             return None
 
     return None
+
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 def generate_image_from_text(prompt: str) -> str:
     """
