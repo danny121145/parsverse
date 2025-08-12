@@ -525,7 +525,6 @@ if d_submit:
                 traits=d_traits,
                 hobby=d_hobby or "general civic duties",
                 style=d_style,
-                detail_level=2
             )
         st.success("Your persona is ready!")
         st.markdown(format_persona_persian(profile, name=d_name), unsafe_allow_html=True)
