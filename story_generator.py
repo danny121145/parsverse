@@ -555,25 +555,24 @@ def generate_parsverse_profile(
     last_concat = ""
 
     for _ in range(max_tries):
-        # ---- Call LLM ----
-        if PROVIDER == "openai":
-            resp = openai_client.chat.completions.create(
+        # ---- Call LLM via lazy client ----
+        provider, client = _get_client()
+        if provider == "openai":
+            resp = client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=1100,
             )
             raw = resp.choices[0].message.content.strip()
-        elif PROVIDER == "groq":
-            resp = groq_client.chat.completions.create(
+        else:
+            resp = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=1100,
             )
             raw = resp.choices[0].message.content.strip()
-        else:
-            raise RuntimeError("No valid provider configured.")
 
         # ---- Strip code fences if present ----
         raw_clean = raw.strip()
@@ -629,7 +628,7 @@ def generate_parsverse_profile(
             if key in data and isinstance(data[key], str):
                 data[key] = clean_str(data[key])
 
-        # ---- Clean list fields (correct bug: check the value, not the key) ----
+        # ---- Clean list fields ----
         for key in ["titles", "symbols"]:
             if key in data and isinstance(data[key], list):
                 data[key] = [clean_str(str(x)) for x in data[key]]
