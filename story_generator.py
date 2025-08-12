@@ -599,29 +599,36 @@ def generate_parsverse_profile(
             s = re.sub(r",\s*([\]}])", r"\1", s)
             return s
 
+        # ---- Parse JSON robustly (handles “Here is the JSON …” prefaces) ----
         raw_clean = _coerce_json_text(raw)
 
         try:
             data = json.loads(raw_clean)
         except Exception:
-            data = {
-                "kingdom": "",
-                "locale": "",
-                "role": "",
-                "favorite_food": "",
-                "hobby": hobby,
-                "friends": "",
-                "titles": [],
-                "symbols": [],
-                "artifact": "",
-                "appearance": "",
-                "dwelling": "",
-                "daily_routine": "",
-                "festival": "",
-                "short_story": "",
-                "backstory": raw_clean,
-                "motto": ""
-            }
+            # As a last resort, try once more after stripping any leftover text
+            raw_only = _extract_json(raw_clean)
+            try:
+                data = json.loads(raw_only)
+            except Exception:
+                # Fallback: treat the entire text as a backstory so the UI still renders
+                data = {
+                    "kingdom": "",
+                    "locale": "",
+                    "role": "",
+                    "favorite_food": "",
+                    "hobby": hobby,
+                    "friends": "",
+                    "titles": [],
+                    "symbols": [],
+                    "artifact": "",
+                    "appearance": "",
+                    "dwelling": "",
+                    "daily_routine": "",
+                    "festival": "",
+                    "short_story": "",
+                    "backstory": raw,   # keep the original so we can see what came back
+                    "motto": ""
+                }
 
         # ---- Normalize list-like fields that may arrive as arrays ----
         list_like_fields = [
