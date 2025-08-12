@@ -579,18 +579,27 @@ def generate_parsverse_profile(
             )
             raw = resp.choices[0].message.content.strip()
 
-        # ---- Strip code fences if present ----
-        raw_clean = raw.strip()
-        for fence in ("```json", "```"):
-            if raw_clean.startswith(fence):
-                raw_clean = raw_clean[len(fence):].strip()
-        if raw_clean.endswith("```"):
-            raw_clean = raw_clean[:-3].strip()
+        def _strip_code_fences(s: str) -> str:
+            s = s.strip()
+            for fence in ("```json", "```"):
+                if s.startswith(fence):
+                    s = s[len(fence):].strip()
+            if s.endswith("```"):
+                s = s[:-3].strip()
+            return s
 
-        # ---- Extract just the JSON object if the model added a preface ----
-        raw_clean = _extract_json(raw_clean)
+        def _coerce_json_text(s: str) -> str:
+            # 1) pull out the first {...} block if there’s extra text
+            s = _extract_json(_strip_code_fences(s))
+            # 2) normalize smart quotes → straight quotes
+            s = s.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
+            # 3) remove trailing commas before ] or }
+            import re
+            s = re.sub(r",\s*([\]}])", r"\1", s)
+            return s
 
-        # ---- Parse JSON (fallback: treat as backstory) ----
+        raw_clean = _coerce_json_text(raw)
+
         try:
             data = json.loads(raw_clean)
         except Exception:
