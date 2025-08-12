@@ -2,6 +2,7 @@
 import os
 import re
 import json
+import base64
 from dotenv import load_dotenv
 
 # --- Load .env (local dev) ---
@@ -46,6 +47,67 @@ def _get_client():
     else:
         raise RuntimeError("Unsupported PROVIDER. Use 'groq' or 'openai'.")
 
+# ================== Images provider (optional) ==================
+# Supported providers: "openai", "xai" (Grok), "huggingface"
+IMG_PROVIDER = (os.getenv("IMG_PROVIDER") or "huggingface").strip().lower()
+
+# OpenAI
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+
+# xAI / Grok
+XAI_IMAGE_MODEL = os.getenv("XAI_IMAGE_MODEL", "grok-2-image")
+
+# Hugging Face (good defaults: SDXL base or SDXL Turbo)
+HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
+HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_IMAGE_MODEL}"
+
+_openai_img_client = None
+_xai_img_client = None
+_hf_session = None
+
+def _get_image_client():
+    """
+    Returns (provider_name, client_like_object_or_session) or (None, None).
+    - openai: returns OpenAI client
+    - xai: returns OpenAI client pointed at x.ai base_url
+    - huggingface: returns a requests.Session with auth header
+    """
+    global _openai_img_client, _xai_img_client, _hf_session
+
+    if IMG_PROVIDER == "openai":
+        from openai import OpenAI
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            return None, None
+        if _openai_img_client is None:
+            _openai_img_client = OpenAI(api_key=key)
+        return "openai", _openai_img_client
+
+    if IMG_PROVIDER == "xai":
+        from openai import OpenAI
+        key = os.getenv("XAI_API_KEY")
+        if not key:
+            return None, None
+        if _xai_img_client is None:
+            _xai_img_client = OpenAI(api_key=key, base_url="https://api.x.ai/v1")
+        return "xai", _xai_img_client
+
+    if IMG_PROVIDER == "huggingface":
+        import requests
+        token = os.getenv("HF_API_TOKEN")
+        if not token:
+            return None, None
+        if _hf_session is None:
+            s = requests.Session()
+            s.headers.update({
+                "Authorization": f"Bearer {token}",
+                "Accept": "image/png",  # ask for raw PNG
+            })
+            _hf_session = s
+        return "huggingface", _hf_session
+
+    return None, None
+
 # ================== Transliteration mode ==================
 TRANSLIT_MODE = (os.getenv("TRANSLIT_MODE") or "modern").strip().lower()
 if TRANSLIT_MODE not in ("modern", "old_persian"):
@@ -75,7 +137,6 @@ REGION_HINTS = {
     "Elam": "Southwestern Iranian plateau prior to Achaemenids; Elamite heritage; Shush (Susa); brickwork and bull imagery."
 }
 
-# Richer regional word-banks to steer flavor
 REGION_LEXICON = {
     "Persis": [
         "Parsa", "Pasargad", "Takht-e Jamshid", "farrah/farr (divine glory)",
@@ -173,7 +234,6 @@ def sanitize_non_iranian(text: str) -> str:
 def contains_banned(text: str) -> bool:
     return any(rx.search(text) for rx, _ in BANNED_COMPILED)
 
-# Exonyms → preferred Persian forms
 GREEK_TO_PERSIAN_MODERN = {
     r"\bZoroaster\b": "Zarathustra",
     r"\bMithras\b": "Mithra",
@@ -215,12 +275,10 @@ def prefer_persian_forms(text: str) -> str:
 
 # ================== Depth helpers ==================
 def _length_for(detail_level: int, base: int, step: int = 120, cap: int = 1400) -> int:
-    """Turns 1–3 into increasing max_tokens."""
     detail_level = max(1, min(3, int(detail_level)))
     return min(cap, base + (detail_level - 1) * step)
 
 def _strictness_clause(strictness: float) -> str:
-    """0.0–1.0 → wording that tightens cultural constraints."""
     strictness = max(0.0, min(1.0, float(strictness)))
     if strictness >= 0.8:
         return "Be rigorously historical; avoid legendary exaggerations unless attested in Iranian sources."
@@ -228,13 +286,25 @@ def _strictness_clause(strictness: float) -> str:
         return "Be historically grounded; keep metaphors restrained and accurate to Iranian tradition."
     return "You may be mildly poetic, but keep references culturally Iranian and plausible."
 
+def image_provider_info() -> dict:
+    """
+    Returns {'provider': 'huggingface'|'openai'|'xai', 'model': '<model_id>'}
+    """
+    if IMG_PROVIDER == "openai":
+        return {"provider": "openai", "model": OPENAI_IMAGE_MODEL}
+    if IMG_PROVIDER == "xai":
+        return {"provider": "xai", "model": XAI_IMAGE_MODEL}
+    if IMG_PROVIDER == "huggingface":
+        return {"provider": "huggingface", "model": HF_IMAGE_MODEL}
+    return {"provider": "unknown", "model": ""}
+
+
 # ================== JSON preface scrubber ==================
 def _extract_json(text: str) -> str:
-    """If the model prepends text (e.g., 'Here is the JSON output:'), pull just the {...} block."""
     s = text.find("{"); e = text.rfind("}")
     return text[s:e+1] if (s != -1 and e != -1 and e > s) else text
 
-# ================== Prompts ==================
+# ================== Prompts & Generators ==================
 FORBIDDEN_LINE = (
     "Forbidden terms: kshatra/kṣatra, dharma, karma, samsara, moksha, mantra, tantra, sutra, chakra, "
     "Veda/Vedic, atman, brahma/brahman/brahmin, Indra, Shiva, Vishnu, Ganesha, Lakshmi, Purusha, yuga, raja/rajah, Hindu/Hinduism."
@@ -305,13 +375,12 @@ Return ONLY valid JSON (no extra text, no code fences) with these keys exactly:
 }}
 """.strip()
 
-# ================== Generators ==================
 def generate_parsverse_myth(
     name: str,
     region: str,
     style: str = "Epic",
-    detail_level: int = 2,         # 1=short, 2=medium, 3=rich
-    strictness: float = 0.6,       # 0.0–1.0
+    detail_level: int = 2,
+    strictness: float = 0.6,
     themes: list[str] | None = None
 ) -> str:
     if not name or not region:
@@ -390,14 +459,10 @@ def generate_parsverse_story(
     name: str,
     region: str,
     style: str = "Epic",
-    detail_level: int = 3,        # 1–3 (defaults richer than myth)
-    strictness: float = 0.7,      # 0.0–1.0 (slightly stricter than myth)
+    detail_level: int = 3,
+    strictness: float = 0.7,
     themes: list[str] | None = None
 ) -> str:
-    """
-    Long-form "Epic Chronicle" with labeled beats, small cast, a line of dialogue,
-    culturally faithful imagery, and a concise closing line.
-    """
     if not name or not region:
         raise ValueError("Both name and region are required.")
     region = _normalize_region(region)
@@ -509,7 +574,6 @@ def generate_parsverse_profile(
             )
             raw = resp.choices[0].message.content.strip()
 
-        # strip code fences if present and any preface
         raw_clean = raw.strip()
         for fence in ("```json", "```"):
             if raw_clean.startswith(fence):
@@ -518,7 +582,6 @@ def generate_parsverse_profile(
             raw_clean = raw_clean[:-3].strip()
         raw_clean = _extract_json(raw_clean)
 
-        # parse JSON or wrap fallback
         try:
             data = json.loads(raw_clean)
         except Exception:
@@ -546,7 +609,6 @@ def generate_parsverse_profile(
                 return s
             return prefer_persian_forms(sanitize_non_iranian(s))
 
-        # clean string fields
         for key in [
             "kingdom","locale","role","favorite_food","hobby","friends","artifact",
             "appearance","dwelling","daily_routine","festival",
@@ -555,12 +617,12 @@ def generate_parsverse_profile(
             if key in data and isinstance(data[key], str):
                 data[key] = clean(data[key])
 
-        # clean list fields
         for key in ["titles","symbols"]:
+            if key in data and isinstance(key, str):
+                pass
             if key in data and isinstance(data[key], list):
                 data[key] = [clean(x) for x in data[key]]
 
-        # banned check across concatenated text fields
         last_data = data
         last_concat = " ".join([
             data.get("kingdom",""), data.get("locale",""), data.get("role",""),
@@ -574,7 +636,6 @@ def generate_parsverse_profile(
         if not contains_banned(last_concat):
             return data
 
-        # tighten constraints and retry
         prompt += (
             "\n\nREVISION INSTRUCTIONS: Your previous draft included forbidden Indic terms. "
             "Regenerate STRICT JSON using ONLY Iranian terminology; strictly obey the forbidden list."
@@ -585,37 +646,115 @@ def generate_parsverse_profile(
         "short_story": ""
     }
 
-# ---- Back-compat / typo aliases (optional) ----
-def parseverse_myth(*args, **kwargs):  # common typo
-    return generate_parsverse_myth(*args, **kwargs)
+# ================== Image prompt builders & generator ==================
+def build_image_prompt_from_myth(myth_text: str, region: str) -> str:
+    region = _normalize_region(region)
+    hint = REGION_HINTS.get(region, "")
+    return (
+        "Create a single high-quality illustration inspired by ancient Iranian art, not anime. "
+        "Composition: painterly, museum poster vibe, soft parchment tones with turquoise and gold accents. "
+        "Subject is a scene from the following myth. Avoid anachronisms. Clothing, architecture, weapons "
+        "should match Iranian context. No text in the image.\n\n"
+        f"Region context: {hint}\n\n"
+        f"Myth excerpt:\n{myth_text[:1200]}"
+    )
 
-def generate_parseverse_myth(*args, **kwargs):  # another typo form
+def build_image_prompt_from_profile(profile: dict) -> str:
+    region = profile.get("locale", "") or profile.get("kingdom", "")
+    hint = ""
+    for r, h in REGION_HINTS.items():
+        if r in region:
+            hint = h; break
+    role = profile.get("role","")
+    symbols = ", ".join(profile.get("symbols", [])[:3])
+    appearance = profile.get("appearance","")
+    return (
+        "Create a portrait-style illustration inspired by ancient Iranian art. "
+        "Subject: the persona described below. Warm parchment background, turquoise & gold accents. "
+        "No text in the image. Historically grounded.\n\n"
+        f"Region context: {hint}\n"
+        f"Role: {role}\n"
+        f"Symbols: {symbols}\n"
+        f"Appearance notes: {appearance[:300]}"
+    )
+
+def generate_image_png_bytes(prompt: str, size: str = "1024x1024") -> bytes | None:
+    """
+    Returns PNG bytes or None. Chooses provider by IMG_PROVIDER env:
+      - openai: gpt-image-1
+      - xai: grok-2-image (OpenAI-compatible client)
+      - huggingface: SDXL via Inference API
+    """
+    provider, client = _get_image_client()
+    if provider is None or client is None:
+        return None
+
+    # Basic safety: nudge styles; remove text-in-image
+    prompt_safe = (
+        "Ancient Iranian-inspired illustration, respectful and historically grounded. "
+        "No text in image. No real people. " + prompt
+    )
+
+    if provider == "openai":
+        resp = client.images.generate(
+            model=OPENAI_IMAGE_MODEL,
+            prompt=prompt_safe,
+            size=size,                     # e.g., "1024x1024"
+            response_format="b64_json",
+        )
+        b64 = resp.data[0].b64_json
+        return base64.b64decode(b64) if b64 else None
+
+    if provider == "xai":
+        # size may be ignored by backend; API is OpenAI-compatible
+        resp = client.images.generate(
+            model=XAI_IMAGE_MODEL,
+            prompt=prompt_safe,
+            response_format="b64_json",
+        )
+        b64 = resp.data[0].b64_json
+        return base64.b64decode(b64) if b64 else None
+
+    if provider == "huggingface":
+        # Hugging Face Inference API – returns raw PNG bytes if Accept: image/png
+        # You can pass generation params in JSON body. Wait for model so first call doesn’t 503.
+        import requests, json as _json
+        payload = {
+            "inputs": prompt_safe,
+            "options": {"wait_for_model": True},
+            # Optional SDXL params:
+            # "parameters": {
+            #     "negative_prompt": "blurry, text, watermark, signature, low quality",
+            #     "num_inference_steps": 30,
+            #     "guidance_scale": 7.0,
+            #     # "width": 1024, "height": 1024,   # many hosted pipelines ignore w/h
+            # }
+        }
+        try:
+            r: requests.Response = client.post(HF_API_URL, json=payload, timeout=60)
+            ct = r.headers.get("Content-Type", "")
+            if r.status_code == 200 and "image/" in ct:
+                return r.content
+            # If the model is still loading or an error occurred, HF returns JSON
+            try:
+                err = r.json()
+                # Common messages: {"error": "...", "estimated_time": ...}
+                # You can surface a friendlier message in the UI if you want.
+                return None
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    return None
+
+# ---- Back-compat / typo aliases ----
+def parseverse_myth(*args, **kwargs):
+    return generate_parsverse_myth(*args, **kwargs)
+def generate_parseverse_myth(*args, **kwargs):
     return generate_parsverse_myth(*args, **kwargs)
 
 # ---- Local smoke test ----
 if __name__ == "__main__":
-    print("Provider:", PROVIDER, "| Translit mode:", TRANSLIT_MODE)
-    key_preview = (os.getenv("OPENAI_API_KEY") or os.getenv("GROQ_API_KEY") or "")[:8]
-    print("API key starts with:", key_preview if key_preview else None)
-
-    print("\n--- Myth Test ---")
-    try:
-        print(generate_parsverse_myth("Daniel", "Persis", "Royal", detail_level=3, themes=["loyalty","water"]))
-    except Exception as e:
-        print("Myth error:", e)
-
-    print("\n--- Profile Test ---")
-    try:
-        profile = generate_parsverse_profile(
-            name="Roxana",
-            region="Khorasan",
-            age=24,
-            gender="Female",
-            traits=["brave", "curious"],
-            hobby="archer",
-            style="Mystic",
-            detail_level=3
-        )
-        print(json.dumps(profile, indent=2, ensure_ascii=False))
-    except Exception as e:
-        print("Profile error:", e)
+    print("Provider:", PROVIDER, "| Translit mode:", TRANSLIT_MODE, "| IMG_PROVIDER:", IMG_PROVIDER)
+    print("Has OpenAI image client:", _get_image_client()[0] is not None)
