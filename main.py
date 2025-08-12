@@ -511,7 +511,7 @@ if st.session_state.gen_myth_image:
             prompt_img = build_image_prompt_from_myth(last["text"], last["region"], last.get("style"))
             img_bytes = generate_image_png_bytes(prompt_img)
         if img_bytes:
-            st.image(img_bytes, caption="ParsVerse Illustration", use_column_width=True)
+            st.image(img_bytes, caption="ParsVerse Illustration", use_container_width=True)
             st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_illustration.png", mime="image/png")
             prov = image_provider_info()
             st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
@@ -679,7 +679,7 @@ if st.session_state.gen_persona_image:
             prompt_img = build_image_prompt_from_profile(prof)
             img_bytes = generate_image_png_bytes(prompt_img)
         if img_bytes:
-            st.image(img_bytes, caption="ParsVerse Portrait", use_column_width=True)
+            st.image(img_bytes, caption="ParsVerse Portrait", use_container_width=True)
             st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_portrait.png", mime="image/png")
             prov = image_provider_info()
             st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
@@ -722,7 +722,7 @@ if st.session_state.gen_myth_image and st.session_state.last_myth:
     st.session_state.gen_myth_image = False
 
     if img_bytes:
-        st.image(img_bytes, caption="ParsVerse Illustration", use_column_width=True)
+        st.image(img_bytes, caption="ParsVerse Illustration", use_container_width=True)
         st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_illustration.png", mime="image/png")
         prov = image_provider_info()
         st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
@@ -740,7 +740,7 @@ if st.session_state.gen_persona_image and st.session_state.last_persona:
     st.session_state.gen_persona_image = False
 
     if img_bytes:
-        st.image(img_bytes, caption="ParsVerse Portrait", use_column_width=True)
+        st.image(img_bytes, caption="ParsVerse Portrait", use_container_width=True)
         st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_portrait.png", mime="image/png")
         prov = image_provider_info()
         st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
