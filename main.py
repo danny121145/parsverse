@@ -19,6 +19,7 @@ generate_image_png_bytes = sg.generate_image_png_bytes
 REGIONS = sg.REGIONS
 REGION_HINTS = sg.REGION_HINTS
 image_provider_info = sg.image_provider_info
+generate_image_from_text = sg.generate_image_from_text
 
 
 # ------------------ Config ------------------
@@ -529,6 +530,23 @@ if d_submit:
                 style=d_style,
                 detail_level=2
             )
+            # Create a descriptive image prompt from persona
+            image_prompt = f"Ancient Persian illustration of {profile.get('role','')} from {profile.get('kingdom','')}, wearing {profile.get('appearance','')}, in the setting of {profile.get('locale','')}."
+
+            # Generate image (limit to 1 per session for now)
+            if "image_generated" not in st.session_state:
+                st.session_state.image_generated = False
+
+            if not st.session_state.image_generated:
+                try:
+                    img_url = generate_image_from_text(image_prompt)
+                    st.image(img_url, caption="AI-generated Persona Portrait")
+                    st.session_state.image_generated = True
+                except Exception as e:
+                    st.warning(f"Image generation failed: {e}")
+            else:
+                st.info("Image generation limit reached for this session.")
+
         st.success("Your persona is ready!")
         st.markdown(format_persona_persian(profile, name=d_name), unsafe_allow_html=True)
 

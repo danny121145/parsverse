@@ -4,6 +4,7 @@ import re
 import json
 import base64
 from dotenv import load_dotenv
+import requests
 
 # --- Load .env (local dev) ---
 BASE_DIR = os.path.dirname(__file__)
@@ -785,7 +786,32 @@ def generate_image_png_bytes(prompt: str, size: str = "1024x1024") -> bytes | No
             return None
 
     return None
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+def generate_image_from_text(prompt: str) -> str:
+    """
+    Generate an image from text using Hugging Face's Stable Diffusion XL model.
+    Returns a base64 data URI you can pass to st.image().
+    """
+    if not HF_API_TOKEN:
+        raise ValueError("HF_API_TOKEN not set. Please set it in your environment.")
 
+    model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+
+    payload = {
+        "inputs": prompt,
+        "options": {"wait_for_model": True}
+    }
+
+    response = requests.post(api_url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Image generation failed: {response.text}")
+
+    image_bytes = response.content
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/png;base64,{image_base64}"
 # ---- Back-compat / typo aliases ----
 def parseverse_myth(*args, **kwargs):
     return generate_parsverse_myth(*args, **kwargs)
