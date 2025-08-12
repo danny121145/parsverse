@@ -693,35 +693,55 @@ def generate_parsverse_profile(
     }
 
 # ================== Image prompt builders & generator ==================
-def build_image_prompt_from_myth(myth_text: str, region: str) -> str:
+def build_image_prompt_from_myth(myth_text: str, region: str, style: str | None = None) -> str:
+    """Richer, art-directed prompt for a single myth scene."""
     region = _normalize_region(region)
     hint = REGION_HINTS.get(region, "")
+    lex = ", ".join(REGION_LEXICON.get(region, []))
+    style_line = f"Tone: {style}." if style else ""
     return (
-        "Create a single high-quality illustration inspired by ancient Iranian art, not anime. "
-        "Composition: painterly, museum poster vibe, soft parchment tones with turquoise and gold accents. "
-        "Subject is a scene from the following myth. Avoid anachronisms. Clothing, architecture, weapons "
-        "should match Iranian context. No text in the image.\n\n"
-        f"Region context: {hint}\n\n"
-        f"Myth excerpt:\n{myth_text[:1200]}"
+        "Create a single, square illustration inspired by ancient Iranian art traditions (Achaemenid reliefs, Sasanian rock reliefs, "
+        "painted manuscripts). Render in a painterly, museum-poster aesthetic: warm parchment base with turquoise and gold accents; "
+        "no modern elements, no text, no watermark.\n"
+        f"{style_line}\n"
+        "Scene: depict ONE decisive moment from the story excerpt below. Focus on clear silhouette, layered depth, and period-correct "
+        "clothing/architecture/gear. Suggested motifs to borrow subtly: cypress, winged sun disk, bull protomes, apadana columns, "
+        "glazed brick patterns. Camera: three-quarter view, mid-distance. Lighting: dawn or oil-lamp warmth.\n\n"
+        f"Region context & motifs: {hint}  •  Lexicon cues: {lex}\n\n"
+        f"Story excerpt (guide the content, not exact layout):\n{myth_text[:1400]}"
     )
 
 def build_image_prompt_from_profile(profile: dict) -> str:
-    region = profile.get("locale", "") or profile.get("kingdom", "")
+    """Richer portrait prompt that leverages persona fields."""
+    # Region hint
+    region_text = profile.get("locale", "") or profile.get("kingdom", "")
     hint = ""
     for r, h in REGION_HINTS.items():
-        if r in region:
-            hint = h; break
+        if r in region_text:
+            hint = h
+            break
+
     role = profile.get("role","")
-    symbols = ", ".join(profile.get("symbols", [])[:3])
+    kingdom = profile.get("kingdom","")
+    locale = profile.get("locale","")
+    titles = ", ".join(profile.get("titles", [])[:3])
+    symbols = ", ".join(profile.get("symbols", [])[:4])
+    artifact = profile.get("artifact","")
     appearance = profile.get("appearance","")
+    dwelling = profile.get("dwelling","")
+
     return (
-        "Create a portrait-style illustration inspired by ancient Iranian art. "
-        "Subject: the persona described below. Warm parchment background, turquoise & gold accents. "
-        "No text in the image. Historically grounded.\n\n"
-        f"Region context: {hint}\n"
-        f"Role: {role}\n"
-        f"Symbols: {symbols}\n"
-        f"Appearance notes: {appearance[:300]}"
+        "Create a portrait-style illustration inspired by ancient Iranian visual language (Achaemenid/Sasanian reliefs and illuminated manuscripts). "
+        "Subject: a single person, half-length or three-quarter, facing slightly off-camera. Warm parchment background with subtle turquoise & gold tracery; "
+        "no text, no watermark, no modern elements.\n"
+        f"Realm/Region: {kingdom} — {locale}  •  Context: {hint}\n"
+        f"Role: {role}  •  Titles (optional to hint): {titles}\n"
+        f"Symbols to echo subtly (jewelry, embroidery, backdrop): {symbols}\n"
+        f"Signature artifact to include tastefully: {artifact}\n"
+        f"Appearance notes (clothing/materials/physiognomy): {appearance}\n"
+        f"Background flavor (architecture/landscape cue): {dwelling}\n"
+        "Composition: dignified, calm expression; crisp silhouette; soft rim light; shallow depth of field.\n"
+        "Style: painterly, layered textures, slight paper grain; avoid photoreal skin; emphasize historical fabrics & metalwork."
     )
 
 def generate_image_png_bytes(prompt: str, size: str = "1024x1024") -> bytes | None:

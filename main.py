@@ -36,6 +36,18 @@ if "quota" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = {"myths": [], "personas": []}
 
+# ---- Image generation state ----
+if "last_myth" not in st.session_state:
+    st.session_state.last_myth = None
+if "gen_myth_image" not in st.session_state:
+    st.session_state.gen_myth_image = False
+
+if "last_persona" not in st.session_state:
+    st.session_state.last_persona = None
+if "gen_persona_image" not in st.session_state:
+    st.session_state.gen_persona_image = False
+
+
 # ------------------ Brand + Responsive CSS ------------------
 BRAND_CSS = """
 <style>
@@ -426,6 +438,12 @@ with st.expander("✨ Quick Myth (simple scroll) — or toggle for Epic Chronicl
                 st.success("Your scroll is ready!")
                 st.markdown(format_myth_persian(myth, name=q_name, region=q_region, style=q_style), unsafe_allow_html=True)
                 generated_text = myth
+                # Save for image generation across reruns
+                st.session_state.last_myth = {
+                    "text": generated_text,
+                    "region": q_region,
+                    "style": q_style,
+                }
                 text_block_id = "myth-text"
                 dl_name = f"parsverse_myth_{q_name or 'anon'}.txt"
 
@@ -458,26 +476,12 @@ with st.expander("✨ Quick Myth (simple scroll) — or toggle for Epic Chronicl
             </button>
             """, unsafe_allow_html=True)
 
-            # Image generation button (limited)
+            # Inline image button just sets a flag (actual generation handled later)
             can_img = can_make("image")
             img_btn_disabled = not can_img or generate_image_png_bytes is None
             img_help = "1 free image per session" + ("" if can_img else " — limit reached")
-            if st.button("🖼️ Generate illustration from this", disabled=img_btn_disabled, help=img_help):
-                if not can_img:
-                    st.warning("Image limit reached for this session.")
-                else:
-                    with st.spinner("Painting your scene…"):
-                        prompt_img = build_image_prompt_from_myth(generated_text, q_region)
-                        img_bytes = generate_image_png_bytes(prompt_img)
-                    if img_bytes:
-                        st.image(img_bytes, caption="ParsVerse Illustration", use_column_width=True)
-                        st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_illustration.png", mime="image/png")
-                        prov = image_provider_info()
-                        st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
-
-                        note_usage("image"); bump_counter("images"); log_event("image", {"region": q_region, "style": q_style, "mode": "chronicle" if q_long else "myth"})
-                    else:
-                        st.error("Image generation is not configured (needs OpenAI key) or failed.")
+            if st.button("🖼️ Generate illustration from this", disabled=img_btn_disabled, help=img_help, key="inline_myth_img"):
+                st.session_state.gen_myth_image = True
 
             # Share
             share_label = "epic chronicle" if q_long else "myth"
@@ -487,6 +491,36 @@ with st.expander("✨ Quick Myth (simple scroll) — or toggle for Epic Chronicl
             # History + quota + analytics
             st.session_state.history["myths"].append({"name": q_name, "region": q_region, "style": q_style, "text": generated_text})
             note_usage("myth"); bump_counter("myths"); log_event("myth", {"name": q_name, "region": q_region, "style": q_style})
+
+# A global “illustrate last myth/chronicle” button that works even after reruns
+if st.session_state.last_myth:
+    can_img = can_make("image")
+    disabled = not can_img or generate_image_png_bytes is None
+    if st.button("🖼️ Illustrate last myth/chronicle", disabled=disabled, key="global_myth_img"):
+        st.session_state.gen_myth_image = True
+
+# If the flag is set, do the actual myth image generation here
+if st.session_state.gen_myth_image:
+    last = st.session_state.last_myth
+    if not last:
+        st.warning("No myth/chronicle available to illustrate yet.")
+    elif not can_make("image"):
+        st.warning("Image limit reached for this session.")
+    else:
+        with st.spinner("Painting your scene…"):
+            prompt_img = build_image_prompt_from_myth(last["text"], last["region"], last.get("style"))
+            img_bytes = generate_image_png_bytes(prompt_img)
+        if img_bytes:
+            st.image(img_bytes, caption="ParsVerse Illustration", use_column_width=True)
+            st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_illustration.png", mime="image/png")
+            prov = image_provider_info()
+            st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
+            note_usage("image"); bump_counter("images"); log_event("image", {"region": last["region"], "style": last.get("style",""), "mode": "chronicle" if last.get("is_long") else "myth"})
+        else:
+            st.error("Image generation is not configured or failed.")
+    # Reset the trigger
+    st.session_state.gen_myth_image = False
+
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -549,6 +583,13 @@ if d_submit:
 
         st.success("Your persona is ready!")
         st.markdown(format_persona_persian(profile, name=d_name), unsafe_allow_html=True)
+        # Save for image generation across reruns
+        st.session_state.last_persona = {
+            "profile": profile,
+            "region": d_region,
+            "style": d_style,
+        }
+
 
         # Region quick facts
         st.markdown(f"<div class='fact-card'><strong>Region facts:</strong> {REGION_HINTS.get(d_region,'')}</div>", unsafe_allow_html=True)
@@ -590,26 +631,17 @@ Backstory:
 """
             st.download_button("⬇️ Download Persona (.txt)", data=persona_txt.encode("utf-8"), file_name=f"parsverse_persona_{d_name or 'anon'}.txt", mime="text/plain")
 
-        # Image generation from persona (portrait)
+        # Persona portrait button (manual trigger)
         can_img = can_make("image")
         img_btn_disabled = not can_img or generate_image_png_bytes is None
         img_help = "1 free image per session" + ("" if can_img else " — limit reached")
-        if st.button("🖼️ Generate persona portrait", disabled=img_btn_disabled, help=img_help):
+
+        if st.button("🖼️ Generate persona portrait", key="btn_gen_persona_img", disabled=img_btn_disabled, help=img_help):
             if not can_img:
                 st.warning("Image limit reached for this session.")
             else:
-                with st.spinner("Painting your portrait…"):
-                    prompt_img = build_image_prompt_from_profile(profile)
-                    img_bytes = generate_image_png_bytes(prompt_img)
-                if img_bytes:
-                    st.image(img_bytes, caption="ParsVerse Portrait", use_column_width=True)
-                    st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_portrait.png", mime="image/png")
-                    prov = image_provider_info()
-                    st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
-
-                    note_usage("image"); bump_counter("images"); log_event("image", {"region": d_region, "style": d_style, "mode": "persona"})
-                else:
-                    st.error("Image generation is not configured (needs OpenAI key) or failed.")
+                st.session_state.gen_persona_image = True
+                st.rerun()
 
         # Share
         role = profile.get("role", "") or "Citizen"
@@ -627,6 +659,34 @@ Backstory:
             "profile": profile
         })
         note_usage("persona"); bump_counter("personas"); log_event("persona", {"name": d_name, "region": d_region, "age": int(d_age), "role": profile.get("role","")})
+
+# Global persona portrait button (works after reruns)
+if st.session_state.last_persona:
+    can_img = can_make("image")
+    disabled = not can_img or generate_image_png_bytes is None
+    if st.button("🖼️ Generate portrait from last persona", disabled=disabled, key="global_persona_img"):
+        st.session_state.gen_persona_image = True
+
+# If flag set, do persona image generation here
+if st.session_state.gen_persona_image:
+    prof = st.session_state.last_persona
+    if not prof:
+        st.warning("No persona available to illustrate yet.")
+    elif not can_make("image"):
+        st.warning("Image limit reached for this session.")
+    else:
+        with st.spinner("Painting your portrait…"):
+            prompt_img = build_image_prompt_from_profile(prof)
+            img_bytes = generate_image_png_bytes(prompt_img)
+        if img_bytes:
+            st.image(img_bytes, caption="ParsVerse Portrait", use_column_width=True)
+            st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_portrait.png", mime="image/png")
+            prov = image_provider_info()
+            st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
+            note_usage("image"); bump_counter("images"); log_event("image", {"region": prof.get('kingdom','') or prof.get('locale',''), "style": "", "mode": "persona"})
+        else:
+            st.error("Image generation is not configured or failed.")
+    st.session_state.gen_persona_image = False
 
 # ------------------ Session History ------------------
 with st.expander("🗂️ Your session history"):
@@ -652,3 +712,38 @@ Results are generated by AI with strict prompt constraints — treat them as cre
 # ------------------ Footer ------------------
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 st.markdown("<div class='footer'>Crafted with 🪶 in turquoise & gold • ParsVerse</div>", unsafe_allow_html=True)
+
+# -------- Myth image handler --------
+if st.session_state.gen_myth_image and st.session_state.last_myth:
+    payload = st.session_state.last_myth
+    with st.spinner("Painting your scene…"):
+        prompt_img = build_image_prompt_from_myth(payload["text"], payload["region"])
+        img_bytes = generate_image_png_bytes(prompt_img)
+    st.session_state.gen_myth_image = False
+
+    if img_bytes:
+        st.image(img_bytes, caption="ParsVerse Illustration", use_column_width=True)
+        st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_illustration.png", mime="image/png")
+        prov = image_provider_info()
+        st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
+        note_usage("image"); bump_counter("images"); log_event("image", {"region": payload["region"], "style": payload["style"], "mode": "myth"})
+    else:
+        st.error("Image generation is not configured or failed (check IMG_PROVIDER and tokens).")
+
+# -------- Persona image handler --------
+if st.session_state.gen_persona_image and st.session_state.last_persona:
+    payload = st.session_state.last_persona
+    prof = payload["profile"]
+    with st.spinner("Painting your portrait…"):
+        prompt_img = build_image_prompt_from_profile(prof)
+        img_bytes = generate_image_png_bytes(prompt_img)
+    st.session_state.gen_persona_image = False
+
+    if img_bytes:
+        st.image(img_bytes, caption="ParsVerse Portrait", use_column_width=True)
+        st.download_button("⬇️ Download image (.png)", data=img_bytes, file_name="parsverse_portrait.png", mime="image/png")
+        prov = image_provider_info()
+        st.caption(f"Image source: {prov['provider'].title()} • {prov['model']}")
+        note_usage("image"); bump_counter("images"); log_event("image", {"region": payload["region"], "style": payload["style"], "mode": "persona"})
+    else:
+        st.error("Image generation is not configured or failed (check IMG_PROVIDER and tokens).")
