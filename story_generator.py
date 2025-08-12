@@ -543,45 +543,47 @@ def generate_parsverse_profile(
     gender: str,
     traits: list[str],
     hobby: str,
-    style: str = "Epic",
-    detail_level: int = 2
+    style: str = "Epic"
 ) -> dict:
     if not name or not region:
         raise ValueError("Name and region are required.")
+
     prompt = _build_profile_prompt(name, region, age, gender, traits, hobby, style)
 
-    max_tokens = _length_for(detail_level, base=900, step=250, cap=1800)
     max_tries = 3
-    last_data = None
+    last_data: dict | None = None
     last_concat = ""
 
     for _ in range(max_tries):
-        provider, client = _get_client()
-        if provider == "openai":
-            resp = client.chat.completions.create(
+        # ---- Call LLM ----
+        if PROVIDER == "openai":
+            resp = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=max_tokens,
+                max_tokens=1100,
             )
             raw = resp.choices[0].message.content.strip()
-        else:
-            resp = client.chat.completions.create(
+        elif PROVIDER == "groq":
+            resp = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=max_tokens,
+                max_tokens=1100,
             )
             raw = resp.choices[0].message.content.strip()
+        else:
+            raise RuntimeError("No valid provider configured.")
 
+        # ---- Strip code fences if present ----
         raw_clean = raw.strip()
         for fence in ("```json", "```"):
             if raw_clean.startswith(fence):
                 raw_clean = raw_clean[len(fence):].strip()
         if raw_clean.endswith("```"):
             raw_clean = raw_clean[:-3].strip()
-        raw_clean = _extract_json(raw_clean)
 
+        # ---- Parse JSON (fallback: treat as backstory) ----
         try:
             data = json.loads(raw_clean)
         except Exception:
@@ -604,43 +606,63 @@ def generate_parsverse_profile(
                 "motto": ""
             }
 
-        def clean(s: str) -> str:
-            if not isinstance(s, str):
-                return s
-            return prefer_persian_forms(sanitize_non_iranian(s))
+        # ---- Normalize list-like fields that may arrive as arrays ----
+        list_like_fields = [
+            "daily_routine", "short_story", "backstory", "friends",
+            "appearance", "dwelling", "festival"
+        ]
+        for k in list_like_fields:
+            if isinstance(data.get(k), list):
+                data[k] = "; ".join(str(x) for x in data[k])
+
+        # ---- Clean/sanitize scalar string fields ----
+        def clean_str(s: str) -> str:
+            s = sanitize_non_iranian(s)
+            s = prefer_persian_forms(s)
+            return s
 
         for key in [
-            "kingdom","locale","role","favorite_food","hobby","friends","artifact",
-            "appearance","dwelling","daily_routine","festival",
+            "kingdom","locale","role","favorite_food","hobby","friends",
+            "artifact","appearance","dwelling","daily_routine","festival",
             "short_story","backstory","motto"
         ]:
             if key in data and isinstance(data[key], str):
-                data[key] = clean(data[key])
+                data[key] = clean_str(data[key])
 
-        for key in ["titles","symbols"]:
-            if key in data and isinstance(key, str):
-                pass
+        # ---- Clean list fields (correct bug: check the value, not the key) ----
+        for key in ["titles", "symbols"]:
             if key in data and isinstance(data[key], list):
-                data[key] = [clean(x) for x in data[key]]
+                data[key] = [clean_str(str(x)) for x in data[key]]
+
+        # ---- Build safe concat for banned-check (robust to types) ----
+        def as_text(v):
+            if isinstance(v, list):
+                return " ".join(str(x) for x in v)
+            if isinstance(v, dict):
+                return json.dumps(v, ensure_ascii=False)
+            return "" if v is None else str(v)
 
         last_data = data
         last_concat = " ".join([
-            data.get("kingdom",""), data.get("locale",""), data.get("role",""),
-            data.get("favorite_food",""), data.get("hobby",""), data.get("friends",""),
-            " ".join(data.get("titles",[])), " ".join(data.get("symbols",[])),
-            data.get("artifact",""), data.get("appearance",""), data.get("dwelling",""),
-            data.get("daily_routine",""), data.get("festival",""),
-            data.get("short_story",""), data.get("backstory",""), data.get("motto","")
+            as_text(data.get("kingdom","")), as_text(data.get("locale","")), as_text(data.get("role","")),
+            as_text(data.get("favorite_food","")), as_text(data.get("hobby","")), as_text(data.get("friends","")),
+            as_text(data.get("titles", [])), as_text(data.get("symbols", [])),
+            as_text(data.get("artifact","")), as_text(data.get("appearance","")), as_text(data.get("dwelling","")),
+            as_text(data.get("daily_routine","")), as_text(data.get("festival","")),
+            as_text(data.get("short_story","")), as_text(data.get("backstory","")), as_text(data.get("motto",""))
         ])
 
+        # ---- If clean of banned terms, return ----
         if not contains_banned(last_concat):
             return data
 
+        # ---- Tighten constraints and retry ----
         prompt += (
             "\n\nREVISION INSTRUCTIONS: Your previous draft included forbidden Indic terms. "
             "Regenerate STRICT JSON using ONLY Iranian terminology; strictly obey the forbidden list."
         )
 
+    # Final fallback after retries
     return last_data or {
         "backstory": "Generation failed after retries. Please try again.",
         "short_story": ""
