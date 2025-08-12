@@ -122,19 +122,20 @@ st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
 # --------- Illuminated formatters ----------
 def format_persona_persian(data: dict, *, name: str | None = None) -> str:
-    titles = ", ".join(data.get("titles", [])) or ""
-    symbols = data.get("symbols", [])
-    role = data.get("role","")
-    locale = data.get("locale","")
-    kingdom = data.get("kingdom","")
-    motto = data.get("motto","")
+    titles = ", ".join(data.get("titles", []) or [])
+    symbols_list = data.get("symbols", []) or []
+    role = data.get("role", "") or ""
+    locale = data.get("locale", "") or ""
+    kingdom = data.get("kingdom", "") or ""
+    motto = data.get("motto", "") or ""
 
-    header_line = f"{role} of {locale}" if role or locale else kingdom
-    subtitle_html = f'<p class="illum-sub">{subtitle}</p>' if subtitle else ''
-    name_html = f'<p class="illum-sub">{display_name}</p>' if display_name else ''
-    display_name = name or titles or ""
+    header_line = f"{role} of {locale}" if (role or locale) else (kingdom or "Persona")
+    display_name = (name or "").strip() or titles
     subtitle = motto
-    chips_html = "".join([f"<span class='chip'>{s}</span>" for s in symbols])
+
+    chips_html = "".join(f"<span class='chip'>{s}</span>" for s in symbols_list)
+    subtitle_html = f"<p class='illum-sub'>{subtitle}</p>" if subtitle else ""
+    name_html = f"<p class='illum-sub'>{display_name}</p>" if display_name else ""
 
     return f"""
 <div class="illum-card">
